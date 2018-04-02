@@ -139,6 +139,12 @@
     </None>
     <None Include="App.config" />
     <None Include="packages.config" />
+    <None Include="Docs\Powerwall Service.pdf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Docs\SAMPLE.PowerwallService.exe.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="PWHistoryDataSet.xsc">
       <DependentUpon>PWHistoryDataSet.xsd</DependentUpon>
     </None>
@@ -150,6 +156,21 @@
     <None Include="PWHistoryDataSet.xss">
       <DependentUpon>PWHistoryDataSet.xsd</DependentUpon>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Docs\All Powerwall Service Events Log Filter.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Docs\Key Powerwall Service Events Log Filter.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Docs\PWHistoryCreateAzure.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Docs\PWHistoryCreateSQL2016SE.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <Content Include="README.txt" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
 </Project>
