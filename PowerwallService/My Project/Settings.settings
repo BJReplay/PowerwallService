@@ -1,0 +1,158 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="My" GeneratedClassName="MySettings" UseMySettingsClassName="true">
+  <Profiles />
+  <Settings>
+    <Setting Name="LogCompactOnly" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="PVSendLoad" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="PVSendPV" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="PVv7" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">battery_instant_power</Value>
+    </Setting>
+    <Setting Name="PVv8" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">load_instant_power</Value>
+    </Setting>
+    <Setting Name="PVv9" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">soc_state_of_charge</Value>
+    </Setting>
+    <Setting Name="PVv10" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">site_instant_power</Value>
+    </Setting>
+    <Setting Name="PVv11" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">battery_instant_average_voltage</Value>
+    </Setting>
+    <Setting Name="PVv12" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">solar_instant_power</Value>
+    </Setting>
+    <Setting Name="SolcastAddress" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">https://api.solcast.com.au/pv_power/forecasts?longitude={0}&amp;latitude={1}&amp;capacity={2}&amp;tilt={3}&amp;azimuth={4}&amp;install_date={5:yyyyMMdd}&amp;api_key={6}&amp;format=json</Value>
+    </Setting>
+    <Setting Name="PWOvernightLoad" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">35</Value>
+    </Setting>
+    <Setting Name="PWMorningBuffer" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">10</Value>
+    </Setting>
+    <Setting Name="PVReportingEnabled" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="PWPeakConsumption" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">17500</Value>
+    </Setting>
+    <Setting Name="PWCapacity" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">13500</Value>
+    </Setting>
+    <Setting Name="PWSelfConsumption" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">13000</Value>
+    </Setting>
+    <Setting Name="LogData" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="TariffIgnoresDST" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="TariffPeakOnWeekends" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="TariffPeakStartWeekday" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">7</Value>
+    </Setting>
+    <Setting Name="TariffPeakEndWeekday" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">23</Value>
+    </Setting>
+    <Setting Name="TariffPeakStartWeekend" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">0</Value>
+    </Setting>
+    <Setting Name="TariffPeakEndWeekend" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">0</Value>
+    </Setting>
+    <Setting Name="TariffPeakRate" Type="System.Single" Scope="Application">
+      <Value Profile="(Default)">20.68</Value>
+    </Setting>
+    <Setting Name="TariffOffPeakRate" Type="System.Single" Scope="Application">
+      <Value Profile="(Default)">10.34</Value>
+    </Setting>
+    <Setting Name="TariffFeedInRate" Type="System.Single" Scope="Application">
+      <Value Profile="(Default)">11.3</Value>
+    </Setting>
+    <Setting Name="PWRoundTripEfficiency" Type="System.Single" Scope="Application">
+      <Value Profile="(Default)">0.85</Value>
+    </Setting>
+    <Setting Name="LogAzureOnly" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="PVSendForecast" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="PVSendForecastAs" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">v12</Value>
+    </Setting>
+    <Setting Name="PVSendPowerwall" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="PVSendVoltage" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="PWChargeModeBackup" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="PWMinBackupPercentage" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">5</Value>
+    </Setting>
+    <Setting Name="PWHistory" Type="(Connection string)" Scope="Application">
+      <DesignTimeValue Profile="(Default)">&lt;?xml version="1.0" encoding="utf-16"?&gt;
+&lt;SerializableConnectionString xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"&gt;
+  &lt;ConnectionString&gt;Server=tcp:TODO.database.windows.net,1433;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;&lt;/ConnectionString&gt;
+&lt;/SerializableConnectionString&gt;</DesignTimeValue>
+      <Value Profile="(Default)">Server=tcp:TODO.database.windows.net,1433;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;</Value>
+    </Setting>
+    <Setting Name="PWHistoryLocal" Type="(Connection string)" Scope="Application">
+      <DesignTimeValue Profile="(Default)">&lt;?xml version="1.0" encoding="utf-16"?&gt;
+&lt;SerializableConnectionString xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"&gt;
+  &lt;ConnectionString&gt;Data Source=TODO;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO&lt;/ConnectionString&gt;
+&lt;/SerializableConnectionString&gt;</DesignTimeValue>
+      <Value Profile="(Default)">Data Source=TODO;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO</Value>
+    </Setting>
+    <Setting Name="PWGatewayAddress" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">TODO</Value>
+    </Setting>
+    <Setting Name="PVOutputSID" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="PVOutputAPIKey" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">TODO</Value>
+    </Setting>
+    <Setting Name="PWGatewayUsername" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">TODO@gmail.com</Value>
+    </Setting>
+    <Setting Name="PWGatewayPassword" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">STTODO</Value>
+    </Setting>
+    <Setting Name="SolcastAPIKey" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">TODO</Value>
+    </Setting>
+    <Setting Name="PVSystemLongitude" Type="System.Single" Scope="Application">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="PVSystemLattitude" Type="System.Single" Scope="Application">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="PVSystemCapacity" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="PVSystemTilt" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="PVSystemAzimuth" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="PVSystemInstallDate" Type="System.DateTime" Scope="Application">
+      <Value Profile="(Default)" />
+    </Setting>
+  </Settings>
+</SettingsFile>
