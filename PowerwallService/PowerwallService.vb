@@ -335,7 +335,7 @@ Public Class PowerwallService
         PreChargeTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
         If PreChargeTargetSOC > 100 Then PreChargeTargetSOC = 100
         If InvokedTime > Sunset And InvokedTime < OperationStart Then
-            If PreChargeTargetSOC > RawTargetSOC Then Intent = "Planning to Charge" Else Intent = "No Charging Required"
+            If PreChargeTargetSOC > RawTargetSOC Or RawTargetSOC > SOC.percentage Then Intent = "Planning to Charge" Else Intent = "No Charging Required"
         End If
         Try
             If InvokedTime > DateAdd(DateInterval.Minute, -20, OperationEnd) And PreCharging Then
