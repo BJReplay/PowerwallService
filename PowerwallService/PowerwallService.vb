@@ -229,8 +229,8 @@ Public Class PowerwallService
         End If
         If Sunrise.Date <> InvokedTime.Date Then
             Dim SunriseSunsetData As Result = GetSunriseSunset(Of Result)(InvokedTime)
-            Sunrise = DateAdd(DateInterval.Minute, -10, SunriseSunsetData.results.sunrise.ToLocalTime)
-            Sunset = DateAdd(DateInterval.Minute, 10, SunriseSunsetData.results.sunset.ToLocalTime)
+            Sunrise = SunriseSunsetData.results.civil_twilight_begin.ToLocalTime
+            Sunset = SunriseSunsetData.results.civil_twilight_end.ToLocalTime
         End If
     End Sub
     Sub DoPerMinuteTasks()
@@ -280,7 +280,7 @@ Public Class PowerwallService
             If AsAtSunrise.results.sunrise.ToLocalTime.Date <> AsAt.Date Then
                 AsAtSunrise = GetSunriseSunset(Of Result)(AsAt)
             End If
-            If AsAt > DateAdd(DateInterval.Minute, -10, AsAtSunrise.results.sunrise.ToLocalTime) And AsAt < DateAdd(DateInterval.Minute, 10, AsAtSunrise.results.sunset.ToLocalTime) Then Return True
+            If AsAt > AsAtSunrise.results.civil_twilight_begin.ToLocalTime And AsAt < AsAtSunrise.results.civil_twilight_end.ToLocalTime Then Return True
         End If
         Return False
     End Function
