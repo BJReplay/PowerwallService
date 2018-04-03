@@ -7,6 +7,7 @@ Imports PowerwallService.PWJson
 Imports PowerwallService.SolCast
 Imports PowerwallService.PVOutput
 Imports PowerwallService.SunriseSunset
+Imports PowerwallService.PowerBIStreaming
 #End Region
 Public Class PowerwallService
 #Region "Variables"
@@ -34,9 +35,6 @@ Public Class PowerwallService
     Shared SecondDayForecast As DayForecast
     Shared ForecastsRetrieved As Date = DateAdd(DateInterval.Hour, -2, Now)
     Shared FirstReadingsAvailable As Boolean = False
-    Shared InSOCRoutine As Boolean = False
-    Shared InSendFCRoutine As Boolean = False
-    Shared InSendPWRoutine As Boolean = False
     Shared PreCharging As Boolean = False
     Shared OperationStart As DateTime
     Shared OperationEnd As DateTime
@@ -289,70 +287,118 @@ Public Class PowerwallService
 #End Region
 #Region "Forecasts and Targets"
     Sub CheckSOCLevel()
-        If Not InSOCRoutine Then
-            InSOCRoutine = True
-            Dim InvokedTime As DateTime = Now
-            SetOperationHours()
-            Dim DoExitSoc As Boolean = False
-            Dim RawTargetSOC As Integer
-            Dim ShortfallInsolation As Single = 0
-            Dim PreChargeTargetSOC As Single = 0
-            Try
-                If Not FirstReadingsAvailable Then
-                    GetObservationAndStore()
-                End If
-                GetForecasts()
-                If InvokedTime > DateAdd(DateInterval.Minute, -20, OperationEnd) And PreCharging Then
-                    DoExitSoc = True
-                    EventLog.WriteEntry(String.Format("Reached end of pre-charging period: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 504)
-                End If
-                If (InvokedTime >= OperationStart And InvokedTime < OperationEnd) Or DoExitSoc Then
-                    Dim RemainingOvernightRatio As Double = DateDiff(DateInterval.Hour, InvokedTime, OperationEnd) / OperationHours
-                    If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
-                    If RemainingOvernightRatio > 1 Then RemainingOvernightRatio = 1
-                    RawTargetSOC = My.Settings.PWMorningBuffer + CInt(My.Settings.PWOvernightLoad * RemainingOvernightRatio)
-                    ShortfallInsolation = My.Settings.PWPeakConsumption - NextDayForecastGeneration
-                    If ShortfallInsolation < 0 Then ShortfallInsolation = 0
-                    PreChargeTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
-                    If PreChargeTargetSOC > 100 Then PreChargeTargetSOC = 100
-                    EventLog.WriteEntry(String.Format("In Operation Period: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 500)
-                    If SOC.percentage < PreChargeTargetSOC And Not DoExitSoc Then
-                        EventLog.WriteEntry(String.Format("Current SOC below required setting: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 501)
-                        If Not PreCharging Then
-                            Dim ChargeSettings As New Operation With {.backup_reserve_percent = CInt(PreChargeTargetSOC), .mode = IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString}
-                            Dim NewChargeSettings As Operation = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
-                            Dim APIResult As Integer = GetPWSecureConfigCompleted("config/completed")
-                            If APIResult = 202 Then
-                                EventLog.WriteEntry(String.Format("Entered Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 506)
-                                PreCharging = True
-                            Else
-                                EventLog.WriteEntry(String.Format("Failed to enter Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 507)
-                            End If
-                        End If
-                    End If
-                    If SOC.percentage > (PreChargeTargetSOC + 5) And PreCharging Then
-                        DoExitSoc = True
-                        EventLog.WriteEntry(String.Format("Current SOC above required setting: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 502)
-                    End If
-                    If DoExitSoc Then
-                        EventLog.WriteEntry(String.Format("Exiting Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 505)
-                        Dim ChargeSettings As New Operation With {.backup_reserve_percent = My.Settings.PWMinBackupPercentage, .mode = "self_consumption"}
+        Dim InvokedTime As DateTime = Now
+        SetOperationHours()
+        If Not FirstReadingsAvailable Then
+            GetObservationAndStore()
+        End If
+        GetForecasts()
+        Dim DoExitSoc As Boolean = False
+        Dim RawTargetSOC As Integer
+        Dim ShortfallInsolation As Single = 0
+        Dim PreChargeTargetSOC As Single = 0
+        Dim RemainingOvernightRatio As Single
+        Dim RemainingInsolationToday As Single
+        Dim ForecastInsolationTomorrow As Single
+        Dim RemainingOffPeak As Single
+        Dim Intent As String = "Thinking"
+        If InvokedTime > OperationStart And InvokedTime < OperationEnd Then
+            RemainingOvernightRatio = CSng(DateDiff(DateInterval.Hour, InvokedTime, OperationEnd) / OperationHours)
+            If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
+            If RemainingOvernightRatio > 1 Then RemainingOvernightRatio = 1
+            RemainingInsolationToday = NextDayForecastGeneration
+            ForecastInsolationTomorrow = 0
+            ShortfallInsolation = My.Settings.PWPeakConsumption - NextDayForecastGeneration
+            Intent = "Thinking"
+        ElseIf InvokedTime > Sunrise And InvokedTime < Sunset Then
+            RemainingOvernightRatio = 1
+            RemainingInsolationToday = CurrentDayForecast.PVEstimate
+            ForecastInsolationTomorrow = NextDayForecastGeneration
+            ShortfallInsolation = 0
+            Intent = "Sun is Up"
+        ElseIf InvokedTime > OperationEnd And InvokedTime < Sunrise Then
+            RemainingOvernightRatio = 0
+            RemainingInsolationToday = CurrentDayForecast.PVEstimate
+            ForecastInsolationTomorrow = NextDayForecastGeneration
+            ShortfallInsolation = My.Settings.PWPeakConsumption - NextDayForecastGeneration
+            Intent = "Waiting for Sunrise"
+        ElseIf InvokedTime > Sunset And InvokedTime < OperationStart Then
+            RemainingOvernightRatio = 1
+            RemainingInsolationToday = 0
+            ForecastInsolationTomorrow = NextDayForecastGeneration
+            ShortfallInsolation = My.Settings.PWPeakConsumption - NextDayForecastGeneration
+            Intent = "Waiting for Off Peak"
+        End If
+        RemainingOffPeak = My.Settings.PWOvernightLoad * RemainingOvernightRatio
+        RawTargetSOC = My.Settings.PWMorningBuffer + CInt(RemainingOffPeak)
+        If ShortfallInsolation < 0 Then ShortfallInsolation = 0
+        PreChargeTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
+        If PreChargeTargetSOC > 100 Then PreChargeTargetSOC = 100
+        If InvokedTime > Sunset And InvokedTime < OperationStart Then
+            If PreChargeTargetSOC > RawTargetSOC Then Intent = "Planning to Charge" Else Intent = "No Charging Required"
+        End If
+        Try
+            If InvokedTime > DateAdd(DateInterval.Minute, -20, OperationEnd) And PreCharging Then
+                DoExitSoc = True
+                EventLog.WriteEntry(String.Format("Reached end of pre-charging period: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 504)
+                Intent = "Stop Charging"
+            End If
+            If (InvokedTime >= OperationStart And InvokedTime < OperationEnd) Or DoExitSoc Then
+                EventLog.WriteEntry(String.Format("In Operation Period: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 500)
+                If SOC.percentage < PreChargeTargetSOC And Not DoExitSoc Then
+                    EventLog.WriteEntry(String.Format("Current SOC below required setting: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 501)
+                    Intent = "Start Charging"
+                    If Not PreCharging Then
+                        Dim ChargeSettings As New Operation With {.backup_reserve_percent = CInt(PreChargeTargetSOC), .mode = IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString}
                         Dim NewChargeSettings As Operation = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
                         Dim APIResult As Integer = GetPWSecureConfigCompleted("config/completed")
                         If APIResult = 202 Then
-                            PreCharging = False
-                            EventLog.WriteEntry(String.Format("Exited Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 508)
+                            EventLog.WriteEntry(String.Format("Entered Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 506)
+                            PreCharging = True
+                            If PreChargeTargetSOC > (SOC.percentage + 5) Then
+                                Intent = "Charging"
+                            Else
+                                Intent = "Standby"
+                            End If
                         Else
-                            EventLog.WriteEntry(String.Format("Failed to exit Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 509)
+                            EventLog.WriteEntry(String.Format("Failed to enter Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 507)
+                            Intent = "Trying To Charge"
                         End If
                     End If
-                Else
-                    EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage.ToString), EventLogEntryType.Information, 503)
                 End If
-            Catch Ex As Exception
-                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 510)
+                If SOC.percentage > (PreChargeTargetSOC + 5) And PreCharging Then
+                    DoExitSoc = True
+                    EventLog.WriteEntry(String.Format("Current SOC above required setting: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 502)
+                    Intent = "Exit Charging"
+                End If
+                If DoExitSoc Then
+                    EventLog.WriteEntry(String.Format("Exiting Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 505)
+                    Dim ChargeSettings As New Operation With {.backup_reserve_percent = My.Settings.PWMinBackupPercentage, .mode = "self_consumption"}
+                    Dim NewChargeSettings As Operation = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
+                    Dim APIResult As Integer = GetPWSecureConfigCompleted("config/completed")
+                    If APIResult = 202 Then
+                        PreCharging = False
+                        EventLog.WriteEntry(String.Format("Exited Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 508)
+                        Intent = "Self Consumption"
+                    Else
+                        EventLog.WriteEntry(String.Format("Failed to exit Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 509)
+                        Intent = "Trying to Exit Charging"
+                    End If
+                End If
+            Else
+                EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage.ToString), EventLogEntryType.Information, 503)
+            End If
+        Catch Ex As Exception
+            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 510)
+        End Try
+        If My.Settings.PBIChargeIntentEndpoint <> String.Empty Then
+            Try
+                Dim PBIRows As New PBIChargeLogging With {.Rows = New List(Of ChargePlan)}
+                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = My.Settings.PWMorningBuffer, .OperatingIntent = Intent, .RequiredSOC = PreChargeTargetSOC, .RemainingOffPeak = RemainingOffPeak * My.Settings.PWCapacity / 100, .Shortfall = ShortfallInsolation})
+                Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBIChargeIntentEndpoint, PBIRows)
+            Catch ex As Exception
+
             End Try
-            InSOCRoutine = False
         End If
     End Sub
     Sub GetForecasts()
@@ -422,45 +468,41 @@ Public Class PowerwallService
         End Try
     End Sub
     Private Sub SendForecast()
-        If Not InSendFCRoutine Then
-            InSendFCRoutine = True
-            Dim InvokedTime As DateTime = Now
-            If CurrentPeriodForecast Is Nothing Or LastPeriodForecast Is Nothing Then
+        Dim InvokedTime As DateTime = Now
+        If CurrentPeriodForecast Is Nothing Or LastPeriodForecast Is Nothing Then
+            GetForecasts()
+        End If
+        If Not CurrentPeriodForecast Is Nothing And Not LastPeriodForecast Is Nothing Then
+            If CurrentPeriodForecast.period_end.ToLocalTime < InvokedTime Then
                 GetForecasts()
             End If
-            If Not CurrentPeriodForecast Is Nothing And Not LastPeriodForecast Is Nothing Then
-                If CurrentPeriodForecast.period_end.ToLocalTime < InvokedTime Then
-                    GetForecasts()
-                End If
-                If CurrentPeriodForecast.pv_estimate > 0 Or LastPeriodForecast.pv_estimate > 0 Then
-                    If LastPeriodForecast.period_end.ToLocalTime <= InvokedTime And CurrentPeriodForecast.period_end.ToLocalTime >= DateAdd(DateInterval.Minute, 4, InvokedTime) Then
-                        Dim EndPower As Single = CurrentPeriodForecast.pv_estimate
-                        Dim DiffPower As Single = EndPower - LastPeriodForecast.pv_estimate
-                        Dim ElapsedMinutes As Double = DateDiff(DateInterval.Minute, LastPeriodForecast.period_end.ToLocalTime, InvokedTime)
-                        Dim ElapsedMinutesMod5 As Double = ElapsedMinutes - ElapsedMinutes Mod 5
-                        Dim PeriodRatio As Double
-                        Select Case ElapsedMinutesMod5
-                            Case 0
-                                PeriodRatio = 1 - (0 / 24)
-                            Case 5
-                                PeriodRatio = 1 - (1 / 24)
-                            Case 10
-                                PeriodRatio = 1 - (5 / 24)
-                            Case 15
-                                PeriodRatio = 1 - (12 / 24)
-                            Case 20
-                                PeriodRatio = 1 - (19 / 24)
-                            Case 25
-                                PeriodRatio = 1 - (23 / 24)
-                            Case 30
-                                PeriodRatio = 1 - (24 / 24)
-                        End Select
-                        Dim ForecastSolar As String = (EndPower - (DiffPower * PeriodRatio)).ToString
-                        PVSaveExtendedData(InvokedTime, My.Settings.PVSendForecastAs, ForecastSolar)
-                    End If
+            If CurrentPeriodForecast.pv_estimate > 0 Or LastPeriodForecast.pv_estimate > 0 Then
+                If LastPeriodForecast.period_end.ToLocalTime <= InvokedTime And CurrentPeriodForecast.period_end.ToLocalTime >= DateAdd(DateInterval.Minute, 4, InvokedTime) Then
+                    Dim EndPower As Single = CurrentPeriodForecast.pv_estimate
+                    Dim DiffPower As Single = EndPower - LastPeriodForecast.pv_estimate
+                    Dim ElapsedMinutes As Double = DateDiff(DateInterval.Minute, LastPeriodForecast.period_end.ToLocalTime, InvokedTime)
+                    Dim ElapsedMinutesMod5 As Double = ElapsedMinutes - ElapsedMinutes Mod 5
+                    Dim PeriodRatio As Double
+                    Select Case ElapsedMinutesMod5
+                        Case 0
+                            PeriodRatio = 1 - (0 / 24)
+                        Case 5
+                            PeriodRatio = 1 - (1 / 24)
+                        Case 10
+                            PeriodRatio = 1 - (5 / 24)
+                        Case 15
+                            PeriodRatio = 1 - (12 / 24)
+                        Case 20
+                            PeriodRatio = 1 - (19 / 24)
+                        Case 25
+                            PeriodRatio = 1 - (23 / 24)
+                        Case 30
+                            PeriodRatio = 1 - (24 / 24)
+                    End Select
+                    Dim ForecastSolar As String = (EndPower - (DiffPower * PeriodRatio)).ToString
+                    PVSaveExtendedData(InvokedTime, My.Settings.PVSendForecastAs, ForecastSolar)
                 End If
             End If
-            InSendFCRoutine = False
         End If
     End Sub
     Function GetSolCastResult(Of JSONType)() As JSONType
@@ -495,8 +537,8 @@ Public Class PowerwallService
             SOC = GetPWAPIResult(Of SOC)("system_status/soe")
             FirstReadingsAvailable = True
             If My.Settings.LogData Then
-                SyncLock DBLock
-                    With MeterReading
+                With MeterReading
+                    SyncLock DBLock
                         Try
                             CompactTA.Insert(ObservationTime.ToUniversalTime, ObservationTime, SOC.percentage, .battery.instant_average_voltage, .site.instant_average_voltage, .battery.instant_power, .site.instant_power, .solar.instant_power, .load.instant_power)
                         Catch Ex As Exception
@@ -522,8 +564,17 @@ Public Class PowerwallService
                                 EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
                             End Try
                         End If
-                    End With
-                End SyncLock
+                    End SyncLock
+                End With
+                If My.Settings.PBILiveLoggingEndpoint <> String.Empty Then
+                    Try
+                        Dim PBIRows As New PBILiveLogging With {.Rows = New List(Of SixSecondOb)}
+                        PBIRows.Rows.Add(New SixSecondOb With {.AsAt = ObservationTime, .Battery = MeterReading.battery.instant_power, .Grid = MeterReading.site.instant_power, .Load = MeterReading.load.instant_power, .SOC = SOC.percentage, .Solar = CSng(IIf(MeterReading.solar.instant_power < 0, 0, MeterReading.solar.instant_power)), .Voltage = MeterReading.battery.instant_average_voltage})
+                        Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBILiveLoggingEndpoint, PBIRows)
+                    Catch ex As Exception
+
+                    End Try
+                End If
             End If
         Catch Ex As Exception
             EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
@@ -679,45 +730,41 @@ Public Class PowerwallService
         End Try
     End Function
     Private Sub SendPowerwallData(AsAt As DateTime, Optional FiveMinData As PWHistoryDataSet.spGet5MinuteAveragesRow = Nothing)
-        If Not InSendPWRoutine Then
-            InSendPWRoutine = True
-            Try
-                If FiveMinData Is Nothing Then FiveMinData = GetFiveMinuteData(AsAt)
-                If Not FiveMinData Is Nothing Then
-                    Dim Params As New List(Of ParamData)
-                    If CheckSunIsUp(AsAt) Then
-                        If My.Settings.PVSendPV Then
-                            Dim PV As Object = FiveMinData("solar_instant_power")
-                            If Not IsDBNull(PV) AndAlso CSng(PV) > 0 Then
-                                Params.Add(New ParamData With {.ParamName = "v2", .Data = PV.ToString})
-                            Else
-                                Params.Add(New ParamData With {.ParamName = "v2", .Data = 0.ToString})
-                            End If
-                        End If
-                        If My.Settings.PVSendForecastAs <> String.Empty Then
-                            Dim FC As Object = FiveMinData("solcast_forecast")
-                            If Not IsDBNull(FC) AndAlso CSng(FC) > 0 Then
-                                Params.Add(New ParamData With {.ParamName = My.Settings.PVSendForecastAs, .Data = FC.ToString})
-                            Else
-                                Params.Add(New ParamData With {.ParamName = My.Settings.PVSendForecastAs, .Data = 0.ToString})
-                            End If
+        Try
+            If FiveMinData Is Nothing Then FiveMinData = GetFiveMinuteData(AsAt)
+            If Not FiveMinData Is Nothing Then
+                Dim Params As New List(Of ParamData)
+                If CheckSunIsUp(AsAt) Then
+                    If My.Settings.PVSendPV Then
+                        Dim PV As Object = FiveMinData("solar_instant_power")
+                        If Not IsDBNull(PV) AndAlso CSng(PV) > 0 Then
+                            Params.Add(New ParamData With {.ParamName = "v2", .Data = PV.ToString})
+                        Else
+                            Params.Add(New ParamData With {.ParamName = "v2", .Data = 0.ToString})
                         End If
                     End If
-                    If My.Settings.PVSendLoad Then Params.Add(New ParamData With {.ParamName = "v4", .Data = FiveMinData("load_instant_power").ToString})
-                    If My.Settings.PVSendVoltage Then Params.Add(New ParamData With {.ParamName = "v6", .Data = FiveMinData("site_instant_average_voltage").ToString})
-                    If My.Settings.PVv7 <> String.Empty Then Params.Add(New ParamData With {.ParamName = "v7", .Data = FiveMinData(My.Settings.PVv7).ToString})
-                    If My.Settings.PVv8 <> String.Empty Then Params.Add(New ParamData With {.ParamName = "v8", .Data = FiveMinData(My.Settings.PVv8).ToString})
-                    If My.Settings.PVv9 <> String.Empty Then Params.Add(New ParamData With {.ParamName = "v9", .Data = FiveMinData(My.Settings.PVv9).ToString})
-                    If My.Settings.PVv10 <> String.Empty Then Params.Add(New ParamData With {.ParamName = "v10", .Data = FiveMinData(My.Settings.PVv10).ToString})
-                    If My.Settings.PVv11 <> String.Empty Then Params.Add(New ParamData With {.ParamName = "v11", .Data = FiveMinData(My.Settings.PVv11).ToString})
-                    If My.Settings.PVv12 <> String.Empty Then Params.Add(New ParamData With {.ParamName = "v12", .Data = FiveMinData(My.Settings.PVv12).ToString})
-                    PVSaveMultipleData(AsAt, Params)
+                    If My.Settings.PVSendForecastAs <> String.Empty Then
+                        Dim FC As Object = FiveMinData("solcast_forecast")
+                        If Not IsDBNull(FC) AndAlso CSng(FC) > 0 Then
+                            Params.Add(New ParamData With {.ParamName = My.Settings.PVSendForecastAs, .Data = FC.ToString})
+                        Else
+                            Params.Add(New ParamData With {.ParamName = My.Settings.PVSendForecastAs, .Data = 0.ToString})
+                        End If
+                    End If
                 End If
-            Catch ex As Exception
-                EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
-            End Try
-            InSendPWRoutine = False
-        End If
+                If My.Settings.PVSendLoad Then Params.Add(New ParamData With {.ParamName = "v4", .Data = FiveMinData("load_instant_power").ToString})
+                If My.Settings.PVSendVoltage Then Params.Add(New ParamData With {.ParamName = "v6", .Data = FiveMinData("site_instant_average_voltage").ToString})
+                If My.Settings.PVv7 <> String.Empty Then Params.Add(New ParamData With {.ParamName = "v7", .Data = FiveMinData(My.Settings.PVv7).ToString})
+                If My.Settings.PVv8 <> String.Empty Then Params.Add(New ParamData With {.ParamName = "v8", .Data = FiveMinData(My.Settings.PVv8).ToString})
+                If My.Settings.PVv9 <> String.Empty Then Params.Add(New ParamData With {.ParamName = "v9", .Data = FiveMinData(My.Settings.PVv9).ToString})
+                If My.Settings.PVv10 <> String.Empty Then Params.Add(New ParamData With {.ParamName = "v10", .Data = FiveMinData(My.Settings.PVv10).ToString})
+                If My.Settings.PVv11 <> String.Empty Then Params.Add(New ParamData With {.ParamName = "v11", .Data = FiveMinData(My.Settings.PVv11).ToString})
+                If My.Settings.PVv12 <> String.Empty Then Params.Add(New ParamData With {.ParamName = "v12", .Data = FiveMinData(My.Settings.PVv12).ToString})
+                PVSaveMultipleData(AsAt, Params)
+            End If
+        Catch ex As Exception
+            EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
+        End Try
     End Sub
     Function PVSaveExtendedData(OutputDate As DateTime, ExParam As String, ExData As String) As Integer
         Try
@@ -768,6 +815,27 @@ Public Class PowerwallService
         Else
             Return 0
         End If
+    End Function
+#End Region
+#Region "PowerBI Streaming"
+    Function PostPowerBIStreamingData(Of JSONType)(Target As String, Data As JSONType) As Integer
+        Try
+            Dim BodyPostData As String = JsonConvert.SerializeObject(Data).ToString
+            Dim BodyByteStream As Byte() = Encoding.UTF8.GetBytes(BodyPostData)
+            Dim request As WebRequest = WebRequest.Create(Target)
+            request.Method = "POST"
+            request.ContentType = "application/json"
+            request.ContentLength = BodyByteStream.Length
+            Dim BodyStream As Stream = request.GetRequestStream()
+            BodyStream.Write(BodyByteStream, 0, BodyByteStream.Length)
+            BodyStream.Close()
+            Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
+            PostPowerBIStreamingData = response.StatusCode
+            response.Close()
+        Catch Ex As Exception
+            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+            Return 0
+        End Try
     End Function
 #End Region
 End Class

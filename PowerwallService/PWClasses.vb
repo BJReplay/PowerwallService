@@ -242,3 +242,40 @@ Public Class SunriseSunset
         Public Property astronomical_twilight_end As Date
     End Class
 End Class
+Public Class PowerBIStreaming
+    Public Class PBILiveLogging
+        Public Property Rows() As List(Of SixSecondOb)
+    End Class
+    Public Class SixSecondOb
+        Public Property Load As Single
+        Public Property Solar As Single
+        Public Property Grid As Single
+        Public Property Battery As Single
+        Public Property Voltage As Single
+        Public Property SOC As Single
+        Public Property AsAt As DateTime
+        Public Property kWMax As Single = My.Settings.PBIkWChartMinMax
+        Public Property kWMin As Single = -My.Settings.PBIkWChartMinMax
+        Public Property SOCMax As Single = 100
+        Public Property SOCMin As Single = 0
+        Public Property VoltageMax As Single = CSng(My.Settings.PBIVoltageNominal * 1.1)
+        Public Property VoltageMin As Single = CSng(My.Settings.PBIVoltageNominal * 0.9)
+        Public Property VoltageTarget As Single = My.Settings.PBIVoltageNominal
+        Public Property SOCTarget As Single = 90
+    End Class
+    Public Class PBIChargeLogging
+        Public Property Rows() As List(Of ChargePlan)
+    End Class
+    Public Class ChargePlan
+        Public Property CurrentSOC As Single
+        Public Property MorningBuffer As Single
+        Public Property RemainingOffPeak As Single
+        Public Property ForecastGeneration As Single
+        Public Property Shortfall As Single
+        Public Property RequiredSOC As Single
+        Public Property AsAt As DateTime
+        Public Property OperatingIntent As String
+        Public Property RemainingInsolation As Single
+    End Class
+End Class
+

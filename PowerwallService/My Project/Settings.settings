@@ -154,5 +154,17 @@
     <Setting Name="PVSystemInstallDate" Type="System.DateTime" Scope="Application">
       <Value Profile="(Default)" />
     </Setting>
+    <Setting Name="PBILiveLoggingEndpoint" Type="(Web Service URL)" Scope="Application">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="PBIChargeIntentEndpoint" Type="(Web Service URL)" Scope="Application">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="PBIkWChartMinMax" Type="System.Single" Scope="Application">
+      <Value Profile="(Default)">5000</Value>
+    </Setting>
+    <Setting Name="PBIVoltageNominal" Type="System.Single" Scope="Application">
+      <Value Profile="(Default)">230</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

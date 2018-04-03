@@ -484,6 +484,42 @@ Namespace My
                 Return CType(Me("PVSystemInstallDate"),Date)
             End Get
         End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.WebServiceUrl)>  _
+        Public ReadOnly Property PBILiveLoggingEndpoint() As String
+            Get
+                Return CType(Me("PBILiveLoggingEndpoint"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.WebServiceUrl)>  _
+        Public ReadOnly Property PBIChargeIntentEndpoint() As String
+            Get
+                Return CType(Me("PBIChargeIntentEndpoint"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("5000")>  _
+        Public ReadOnly Property PBIkWChartMinMax() As Single
+            Get
+                Return CType(Me("PBIkWChartMinMax"),Single)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("230")>  _
+        Public ReadOnly Property PBIVoltageNominal() As Single
+            Get
+                Return CType(Me("PBIVoltageNominal"),Single)
+            End Get
+        End Property
     End Class
 End Namespace
 
