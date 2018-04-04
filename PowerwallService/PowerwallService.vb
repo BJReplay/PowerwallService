@@ -506,12 +506,13 @@ Public Class PowerwallService
         End If
     End Sub
     Function GetSolCastResult(Of JSONType)() As JSONType
+        Dim responseFromServer As String = String.Empty
         Try
             Dim request As WebRequest = WebRequest.Create(String.Format(My.Settings.SolcastAddress, My.Settings.PVSystemLongitude, My.Settings.PVSystemLattitude, My.Settings.PVSystemCapacity, My.Settings.PVSystemTilt, My.Settings.PVSystemAzimuth, My.Settings.PVSystemInstallDate, My.Settings.SolcastAPIKey))
             Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
             Dim dataStream As Stream = response.GetResponseStream()
             Dim reader As StreamReader = New StreamReader(dataStream)
-            Dim responseFromServer As String = reader.ReadToEnd()
+            responseFromServer = reader.ReadToEnd()
             If My.Settings.LogData Then
                 Try
                     SyncLock DBLock
@@ -525,7 +526,7 @@ Public Class PowerwallService
             reader.Close()
             response.Close()
         Catch Ex As Exception
-            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace & vbCrLf & vbCrLf & responseFromServer, EventLogEntryType.Error)
         End Try
     End Function
 #End Region
