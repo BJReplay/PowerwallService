@@ -520,6 +520,33 @@ Namespace My
                 Return CType(Me("PBIVoltageNominal"),Single)
             End Get
         End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+        Public ReadOnly Property PWForceModeOnStartup() As Boolean
+            Get
+                Return CType(Me("PWForceModeOnStartup"),Boolean)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("self_consumption")>  _
+        Public ReadOnly Property PWForceMode() As String
+            Get
+                Return CType(Me("PWForceMode"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("5")>  _
+        Public ReadOnly Property PWForceBackupPercentage() As Byte
+            Get
+                Return CType(Me("PWForceBackupPercentage"),Byte)
+            End Get
+        End Property
     End Class
 End Namespace
 

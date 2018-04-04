@@ -126,6 +126,20 @@ Public Class PowerwallService
         EventLog.WriteEntry("Powerwall Service Started", EventLogEntryType.Information, 101)
     End Sub
     Private Sub DoAsyncStartupProcesses()
+        If My.Settings.PWForceModeOnStartup Then
+            Try
+                Dim ChargeSettings As New Operation With {.backup_reserve_percent = My.Settings.PWForceBackupPercentage, .mode = My.Settings.PWForceMode}
+                Dim NewChargeSettings As Operation = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
+                Dim APIResult As Integer = GetPWSecureConfigCompleted("config/completed")
+                If APIResult = 202 Then
+                    EventLog.WriteEntry(String.Format("Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 600)
+                Else
+                    EventLog.WriteEntry(String.Format("Failed to Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Warning, 601)
+                End If
+            Catch ex As Exception
+
+            End Try
+        End If
         SetOperationHours()
         GetForecasts()
         Task.Run(Sub()
@@ -361,7 +375,7 @@ Public Class PowerwallService
                                 Intent = "Standby"
                             End If
                         Else
-                            EventLog.WriteEntry(String.Format("Failed to enter Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 507)
+                            EventLog.WriteEntry(String.Format("Failed to enter Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Warning, 507)
                             Intent = "Trying To Charge"
                         End If
                     End If
@@ -381,7 +395,7 @@ Public Class PowerwallService
                         EventLog.WriteEntry(String.Format("Exited Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 508)
                         Intent = "Self Consumption"
                     Else
-                        EventLog.WriteEntry(String.Format("Failed to exit Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 509)
+                        EventLog.WriteEntry(String.Format("Failed to exit Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Warning, 509)
                         Intent = "Trying to Exit Charging"
                     End If
                 End If

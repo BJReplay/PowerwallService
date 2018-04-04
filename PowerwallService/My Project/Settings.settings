@@ -166,5 +166,14 @@
     <Setting Name="PBIVoltageNominal" Type="System.Single" Scope="Application">
       <Value Profile="(Default)">230</Value>
     </Setting>
+    <Setting Name="PWForceModeOnStartup" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="PWForceMode" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">self_consumption</Value>
+    </Setting>
+    <Setting Name="PWForceBackupPercentage" Type="System.Byte" Scope="Application">
+      <Value Profile="(Default)">5</Value>
+    </Setting>
   </Settings>
 </SettingsFile>
