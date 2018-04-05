@@ -86,7 +86,7 @@ Public Class PowerwallService
     End Sub
     Protected Async Sub DebugTask()
         Await Task.Run(Sub()
-                           CheckSOCLevel()
+                           If My.Settings.PWControlEnabled Then CheckSOCLevel()
                            If My.Settings.PVSendPowerwall Then DoBackFill(Now)
                        End Sub)
     End Sub
@@ -115,9 +115,11 @@ Public Class PowerwallService
             AddHandler ReportingTimer.Elapsed, AddressOf OnReportingTimer
         End If
 
-        ForecastTimer.Interval = 60 * 10 * 1000 ' Every 10 Minutes
-        ForecastTimer.AutoReset = True
-        AddHandler ForecastTimer.Elapsed, AddressOf OnForecastTimer
+        If My.Settings.PWControlEnabled Then
+            ForecastTimer.Interval = 60 * 10 * 1000 ' Every 10 Minutes
+            ForecastTimer.AutoReset = True
+            AddHandler ForecastTimer.Elapsed, AddressOf OnForecastTimer
+        End If
 
         Task.Run(Sub()
                      DoAsyncStartupProcesses()
@@ -170,7 +172,7 @@ Public Class PowerwallService
         ObservationTimer.Stop()
         OneMinuteTime.Stop()
         If My.Settings.PVReportingEnabled Then ReportingTimer.Stop()
-        ForecastTimer.Stop()
+        If My.Settings.PWControlEnabled Then ForecastTimer.Stop()
         EventLog.WriteEntry("Powerwall Service Paused", EventLogEntryType.Information, 105)
     End Sub
     Protected Overrides Sub OnStop()
@@ -196,7 +198,7 @@ Public Class PowerwallService
         Threading.Thread.Sleep((SecondOffset * 1000) - MilliSeconds)
     End Sub
     Sub AggregateToMinute()
-        EventLog.WriteEntry("Powerwall Service Running at " & Now.ToString, EventLogEntryType.Information, 200)
+        If My.Settings.VerboseLogging Then EventLog.WriteEntry("Powerwall Service Running at " & Now.ToString, EventLogEntryType.Information, 200)
         If My.Settings.LogData Then
             Try
                 SyncLock DBLock
@@ -259,10 +261,12 @@ Public Class PowerwallService
             End If
         End If
         If Minute Mod 10 = 1 Then
-            If ForecastTimer.Enabled = False Then
-                ForecastTimer.Start()
-                EventLog.WriteEntry("Solar Forecast and Charge Monitoring Timer Started", EventLogEntryType.Information, 111)
-                CheckSOCLevel()
+            If My.Settings.PWControlEnabled Then
+                If ForecastTimer.Enabled = False Then
+                    ForecastTimer.Start()
+                    EventLog.WriteEntry("Solar Forecast and Charge Monitoring Timer Started", EventLogEntryType.Information, 111)
+                    CheckSOCLevel()
+                End If
             End If
         End If
         AggregateToMinute()
@@ -358,9 +362,9 @@ Public Class PowerwallService
                 Intent = "Stop Charging"
             End If
             If (InvokedTime >= OperationStart And InvokedTime < OperationEnd) Or DoExitSoc Then
-                EventLog.WriteEntry(String.Format("In Operation Period: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 500)
+                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Operation Period: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 500)
                 If SOC.percentage < PreChargeTargetSOC And Not DoExitSoc Then
-                    EventLog.WriteEntry(String.Format("Current SOC below required setting: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 501)
+                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 501)
                     Intent = "Start Charging"
                     If Not PreCharging Then
                         Dim ChargeSettings As New Operation With {.backup_reserve_percent = CInt(PreChargeTargetSOC), .mode = IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString}
@@ -400,7 +404,7 @@ Public Class PowerwallService
                     End If
                 End If
             Else
-                EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage.ToString), EventLogEntryType.Information, 503)
+                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage.ToString), EventLogEntryType.Information, 503)
             End If
         Catch Ex As Exception
             EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 510)

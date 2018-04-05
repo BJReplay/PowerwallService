@@ -237,7 +237,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("23")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("0")>  _
         Public ReadOnly Property TariffPeakEndWeekday() As Integer
             Get
                 Return CType(Me("TariffPeakEndWeekday"),Integer)
@@ -545,6 +545,24 @@ Namespace My
         Public ReadOnly Property PWForceBackupPercentage() As Byte
             Get
                 Return CType(Me("PWForceBackupPercentage"),Byte)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
+        Public ReadOnly Property VerboseLogging() As Boolean
+            Get
+                Return CType(Me("VerboseLogging"),Boolean)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
+        Public ReadOnly Property PWControlEnabled() As Boolean
+            Get
+                Return CType(Me("PWControlEnabled"),Boolean)
             End Get
         End Property
     End Class
