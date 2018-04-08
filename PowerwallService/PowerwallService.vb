@@ -404,11 +404,12 @@ Public Class PowerwallService
             If (InvokedTime >= OperationStart And InvokedTime < OperationEnd) Or DoExitSoc Then
                 If My.Settings.VerboseLogging And Not DoExitSoc Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, PreChargeTargetSOC), EventLogEntryType.Information, 500)
                 If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0}, OperationStart={1}, OperationEnd={2}", InvokedTime, OperationStart, OperationStart), EventLogEntryType.Information, 713)
-                If SOC.percentage >= My.Settings.PWMorningBuffer And ShortfallInsolation = 0 And My.Settings.PWOvernightStandby And Not PreCharging And Not OnStandby And Not DoExitSoc Then
-                    SetPWMode("Current SOC above morning buffer, standby mode enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent)
+                If My.Settings.PWOvernightStandby And SOC.percentage >= (My.Settings.PWMorningBuffer + (ShortfallInsolation / My.Settings.PWCapacity * 100)) And Not PreCharging And Not OnStandby And Not DoExitSoc Then
+                    SetPWMode("Current SOC above required morning SOC, standby mode enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent)
                     OnStandby = True
+                    PreCharging = False
                 End If
-                If SOC.percentage < PreChargeTargetSOC And Not OnStandby And Not PreCharging And Not DoExitSoc Then
+                If ((SOC.percentage < (My.Settings.PWMorningBuffer + (ShortfallInsolation / My.Settings.PWCapacity * 100)) And OnStandby) Or Not OnStandby) And Not PreCharging And Not DoExitSoc Then
                     If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, PreChargeTargetSOC), EventLogEntryType.Information, 501)
                     Intent = "Start Charging"
                     If Not PreCharging Then

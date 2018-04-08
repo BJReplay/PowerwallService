@@ -4,8 +4,28 @@ This windows service can log data from a local Powerwall to a local database and
 Important: This tool is designed for users who have access to the customise screen that allows them to set a backup percentage in self consumption mode.  If you do not have this option, the API calls that this service makes to request your powerwall to charge or to stop charging may not work.  You may end up with your powerwall stuck in a mode you do not want.  You may not be able to get it out of this mode.  You may be voiding your warranty.  You may end up with a very expensive, very heavy battery that is NOT saving you any money.  You run this program entirely at your own risk.
 ==================================================
 
+Powerwall upgrade instructions.
+--------------------------------------------------
+Check the readme for a release to check if there are any changes in default behaviour or meaning of .config items you should be aware of.
+Unzip the release to a temporary location, and unblock the PowerwallService.exe
+
+Note any changed or new .config items described in the readme for the release, and include the new items in your config by pasting them in (ideally at the bottom, above the closing tag </PowerwallService.My.MySettings>
+
+Check any settings that are referred to as changing default behaviour or meaning.
+
+Update the PowerwallService.config in the directory your service is installed in - you can do this while the service is running; it will not pick up changes until you restart it.
+
+Stop the PowerwallService
+
+Copy the new PowerwallService.exe into the directory your service is installed in.
+
+Start the Powerwall Service
+
+
 Powerwall Service basic installation instructions.
 --------------------------------------------------
+
+
 
 Prerequisites - .Net Framework 4.6 or above
 -------------
