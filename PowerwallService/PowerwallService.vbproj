@@ -137,7 +137,9 @@
       <CustomToolNamespace>My</CustomToolNamespace>
       <LastGenOutput>Settings.Designer.vb</LastGenOutput>
     </None>
-    <None Include="App.config" />
+    <None Include="App.config">
+      <SubType>Designer</SubType>
+    </None>
     <None Include="packages.config" />
     <None Include="Docs\Powerwall Service.pdf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

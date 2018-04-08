@@ -36,6 +36,9 @@ Public Class PowerwallService
     Shared ForecastsRetrieved As Date = DateAdd(DateInterval.Hour, -2, Now)
     Shared FirstReadingsAvailable As Boolean = False
     Shared PreCharging As Boolean = False
+    Shared OnStandby As Boolean = False
+    Shared AboveMinBackup As Boolean = False
+    Shared LastStandbyTarget As Integer = 0
     Shared OperationStart As DateTime
     Shared OperationEnd As DateTime
     Shared OperationStartHour As Integer
@@ -45,10 +48,13 @@ Public Class PowerwallService
     Shared LastPeriodForecast As Forecast
     Shared CurrentPeriodForecast As Forecast
     Shared PVForecast As OutputForecast
+    Shared OperationDOW As DayOfWeek
     Shared Sunrise As DateTime
     Shared Sunset As DateTime
+    Shared Sundown As DateTime
     Shared AsAtSunrise As Result
     Shared DBLock As New Object
+    Shared PWLock As New Object
 #End Region
 #Region "Timer Handlers"
     Protected Async Sub OnObservationTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
@@ -87,7 +93,6 @@ Public Class PowerwallService
     Protected Async Sub DebugTask()
         Await Task.Run(Sub()
                            If My.Settings.PWControlEnabled Then CheckSOCLevel()
-                           If My.Settings.PVSendPowerwall Then DoBackFill(Now)
                        End Sub)
     End Sub
 #End Region
@@ -129,21 +134,31 @@ Public Class PowerwallService
     End Sub
     Private Sub DoAsyncStartupProcesses()
         If My.Settings.PWForceModeOnStartup Then
+            Dim RunningResult As Integer
             Try
-                Dim ChargeSettings As New Operation With {.backup_reserve_percent = My.Settings.PWForceBackupPercentage, .mode = My.Settings.PWForceMode}
-                Dim NewChargeSettings As Operation = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
-                Dim APIResult As Integer = GetPWSecureConfigCompleted("config/completed")
+                Dim ChargeSettings As Operation
+                Dim NewChargeSettings As Operation
+                Dim APIResult As Integer
+                SyncLock PWLock
+                    ChargeSettings = New Operation With {.backup_reserve_percent = My.Settings.PWForceBackupPercentage, .mode = My.Settings.PWForceMode}
+                    NewChargeSettings = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
+                    APIResult = GetPWSecureConfigCompleted("config/completed")
+                    RunningResult = GetPWRunning()
+                End SyncLock
                 If APIResult = 202 Then
                     EventLog.WriteEntry(String.Format("Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 600)
                 Else
                     EventLog.WriteEntry(String.Format("Failed to Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Warning, 601)
                 End If
             Catch ex As Exception
-
+                SyncLock PWLock
+                    RunningResult = GetPWRunning()
+                End SyncLock
             End Try
         End If
-        SetOperationHours()
+        SetOperationHours(Now)
         GetForecasts()
+        GetPWMode()
         Task.Run(Sub()
                      SleepUntilSecBoundary(6)
                      ObservationTimer.Start()
@@ -209,10 +224,13 @@ Public Class PowerwallService
             End Try
         End If
     End Sub
-    Private Sub SetOperationHours()
-        Dim InvokedTime As DateTime = Now
-        Dim OperationDOW As DayOfWeek = InvokedTime.DayOfWeek
+    Public Sub SetOperationHours(InvokedTime As DateTime)
+        Dim TZI As TimeZoneInfo = TimeZoneInfo.Local
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("SetOperationHours Invoked at {0}", InvokedTime), EventLogEntryType.Information, 700)
+        OperationDOW = InvokedTime.DayOfWeek
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("SetOperationHours DOW {0}", OperationDOW), EventLogEntryType.Information, 701)
         If (OperationDOW = DayOfWeek.Saturday Or OperationDOW = DayOfWeek.Sunday) Then
+            If My.Settings.DebugLogging Then EventLog.WriteEntry("In Weekend", EventLogEntryType.Information, 702)
             If My.Settings.TariffPeakOnWeekends Then
                 OperationStartHour = My.Settings.TariffPeakEndWeekend
                 OperationEndHour = My.Settings.TariffPeakStartWeekend
@@ -224,30 +242,40 @@ Public Class PowerwallService
             OperationStartHour = My.Settings.TariffPeakEndWeekday
             OperationEndHour = My.Settings.TariffPeakStartWeekday
         End If
-        If My.Settings.TariffIgnoresDST And System.TimeZone.CurrentTimeZone.IsDaylightSavingTime(InvokedTime) Then
+        If My.Settings.TariffIgnoresDST And TZI.IsDaylightSavingTime(InvokedTime) Then
             OperationStartHour += CByte(1)
             If OperationStartHour > 23 Then OperationStartHour -= CByte(24)
             OperationEndHour += CByte(1)
             If OperationEndHour > 23 Then OperationEndHour -= CByte(24)
         End If
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Operation Hours From {0} To {1}", OperationStartHour, OperationEndHour), EventLogEntryType.Information, 703)
+        Dim OffPeakStartsBeforeMidnight As Boolean = (OperationStartHour > OperationEndHour)
         OperationHours = OperationEndHour - OperationStartHour
         If OperationHours <= 0 Then OperationHours += 24
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Operation Duration {0}", OperationHours), EventLogEntryType.Information, 706)
         OperationStart = New DateTime(InvokedTime.Year, InvokedTime.Month, InvokedTime.Day, OperationStartHour, 0, 0)
-        If OperationStartHour = 0 Then
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Initial Operation Start {0}", OperationStart), EventLogEntryType.Information, 707)
+        If InvokedTime.Hour > OperationEndHour And Not OffPeakStartsBeforeMidnight Then
             OperationStart = DateAdd(DateInterval.Day, 1, OperationStart)
+            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Operation Start {0}", OperationStart), EventLogEntryType.Information, 708)
         End If
-        If InvokedTime.Hour >= 0 And InvokedTime.Hour < OperationEndHour + 1 Then
+        If InvokedTime.Hour >= 0 And InvokedTime.Hour < OperationEndHour + 1 And OffPeakStartsBeforeMidnight Then
             OperationStart = DateAdd(DateInterval.Day, -1, OperationStart)
+            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Operation Start {0}", OperationStart), EventLogEntryType.Information, 709)
         End If
         OperationEnd = New DateTime(OperationStart.Year, OperationStart.Month, OperationStart.Day, OperationEndHour, 0, 0)
-        If OperationStartHour <> 0 Then
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Initial Operation End {0}", OperationEnd), EventLogEntryType.Information, 710)
+        If OffPeakStartsBeforeMidnight Then
             OperationEnd = DateAdd(DateInterval.Day, 1, OperationEnd)
+            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Operation End {0}", OperationEnd), EventLogEntryType.Information, 711)
         End If
         If Sunrise.Date <> InvokedTime.Date Then
             Dim SunriseSunsetData As Result = GetSunriseSunset(Of Result)(InvokedTime)
             Sunrise = SunriseSunsetData.results.civil_twilight_begin.ToLocalTime
             Sunset = SunriseSunsetData.results.civil_twilight_end.ToLocalTime
+            Sundown = SunriseSunsetData.results.sunset.ToLocalTime
         End If
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Start: {0} End: {1}", OperationStart, OperationEnd), EventLogEntryType.Information, 713)
     End Sub
     Sub DoPerMinuteTasks()
         Dim Minute As Integer = Now.Minute
@@ -285,6 +313,17 @@ Public Class PowerwallService
             EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
         End Try
     End Function
+    Function GetUnsecured(URI As String) As Integer
+        Try
+            Dim request As WebRequest = WebRequest.Create(URI)
+            Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
+            GetUnsecured = response.StatusCode
+            response.Close()
+        Catch Ex As Exception
+            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+            Return 0
+        End Try
+    End Function
     Function GetSunriseSunset(Of JSONType)(AsAt As Date) As JSONType
         Return GetUnsecuredJSONResult(Of JSONType)(String.Format("https://api.sunrise-sunset.org/json?lat={0}&lng={1}&formatted=0&date={2:yyyy-MM-dd}", My.Settings.PVSystemLattitude, My.Settings.PVSystemLongitude, AsAt))
     End Function
@@ -306,7 +345,7 @@ Public Class PowerwallService
 #Region "Forecasts and Targets"
     Sub CheckSOCLevel()
         Dim InvokedTime As DateTime = Now
-        SetOperationHours()
+        SetOperationHours(InvokedTime)
         If Not FirstReadingsAvailable Then
             GetObservationAndStore()
         End If
@@ -318,6 +357,7 @@ Public Class PowerwallService
         Dim RemainingOvernightRatio As Single
         Dim RemainingInsolationToday As Single
         Dim ForecastInsolationTomorrow As Single
+        Dim PWPeakConsumption As Integer = CInt(IIf(OperationDOW = DayOfWeek.Saturday Or OperationDOW = DayOfWeek.Sunday, My.Settings.PWPeakConsumptionWeekend, My.Settings.PWPeakConsumption))
         Dim RemainingOffPeak As Single
         Dim Intent As String = "Thinking"
         If InvokedTime > OperationStart And InvokedTime < OperationEnd Then
@@ -326,7 +366,7 @@ Public Class PowerwallService
             If RemainingOvernightRatio > 1 Then RemainingOvernightRatio = 1
             RemainingInsolationToday = NextDayForecastGeneration
             ForecastInsolationTomorrow = 0
-            ShortfallInsolation = My.Settings.PWPeakConsumption - NextDayForecastGeneration
+            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Thinking"
         ElseIf InvokedTime > Sunrise And InvokedTime < Sunset Then
             RemainingOvernightRatio = 1
@@ -338,13 +378,13 @@ Public Class PowerwallService
             RemainingOvernightRatio = 0
             RemainingInsolationToday = CurrentDayForecast.PVEstimate
             ForecastInsolationTomorrow = NextDayForecastGeneration
-            ShortfallInsolation = My.Settings.PWPeakConsumption - NextDayForecastGeneration
+            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Waiting for Sunrise"
         ElseIf InvokedTime > Sunset And InvokedTime < OperationStart Then
             RemainingOvernightRatio = 1
             RemainingInsolationToday = 0
             ForecastInsolationTomorrow = NextDayForecastGeneration
-            ShortfallInsolation = My.Settings.PWPeakConsumption - NextDayForecastGeneration
+            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Waiting for Off Peak"
         End If
         RemainingOffPeak = My.Settings.PWOvernightLoad * RemainingOvernightRatio
@@ -356,55 +396,44 @@ Public Class PowerwallService
             If PreChargeTargetSOC > RawTargetSOC Or RawTargetSOC > SOC.percentage Then Intent = "Planning to Charge" Else Intent = "No Charging Required"
         End If
         Try
-            If InvokedTime > DateAdd(DateInterval.Minute, -20, OperationEnd) And PreCharging Then
+            If InvokedTime > DateAdd(DateInterval.Minute, -20, OperationEnd) And (PreCharging Or AboveMinBackup Or OnStandby) Then
                 DoExitSoc = True
-                EventLog.WriteEntry(String.Format("Reached end of pre-charging period: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 504)
+                EventLog.WriteEntry(String.Format("Reached end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, PreChargeTargetSOC), EventLogEntryType.Information, 504)
                 Intent = "Stop Charging"
             End If
             If (InvokedTime >= OperationStart And InvokedTime < OperationEnd) Or DoExitSoc Then
-                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Operation Period: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 500)
-                If SOC.percentage < PreChargeTargetSOC And Not DoExitSoc Then
-                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 501)
+                If My.Settings.VerboseLogging And Not DoExitSoc Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, PreChargeTargetSOC), EventLogEntryType.Information, 500)
+                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0}, OperationStart={1}, OperationEnd={2}", InvokedTime, OperationStart, OperationStart), EventLogEntryType.Information, 713)
+                If SOC.percentage >= My.Settings.PWMorningBuffer And ShortfallInsolation = 0 And My.Settings.PWOvernightStandby And Not PreCharging And Not OnStandby And Not DoExitSoc Then
+                    SetPWMode("Current SOC above morning buffer, standby mode enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent)
+                    OnStandby = True
+                End If
+                If SOC.percentage < PreChargeTargetSOC And Not OnStandby And Not PreCharging And Not DoExitSoc Then
+                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, PreChargeTargetSOC), EventLogEntryType.Information, 501)
                     Intent = "Start Charging"
                     If Not PreCharging Then
-                        Dim ChargeSettings As New Operation With {.backup_reserve_percent = CInt(PreChargeTargetSOC), .mode = IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString}
-                        Dim NewChargeSettings As Operation = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
-                        Dim APIResult As Integer = GetPWSecureConfigCompleted("config/completed")
-                        If APIResult = 202 Then
-                            EventLog.WriteEntry(String.Format("Entered Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 506)
-                            PreCharging = True
-                            If PreChargeTargetSOC > (SOC.percentage + 5) Then
-                                Intent = "Charging"
-                            Else
-                                Intent = "Standby"
-                            End If
-                        Else
-                            EventLog.WriteEntry(String.Format("Failed to enter Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Warning, 507)
-                            Intent = "Trying To Charge"
-                        End If
+                        SetPWMode("", "Enter", IIf(PreChargeTargetSOC > (SOC.percentage + 5), "Charging", "Standby").ToString, PreChargeTargetSOC, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent)
                     End If
+                    PreCharging = True
                 End If
-                If SOC.percentage > (PreChargeTargetSOC + 5) And PreCharging Then
+                If SOC.percentage > (PreChargeTargetSOC + 5) And PreCharging And Not OnStandby Then
                     DoExitSoc = True
-                    EventLog.WriteEntry(String.Format("Current SOC above required setting: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 502)
+                    EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, PreChargeTargetSOC), EventLogEntryType.Information, 502)
                     Intent = "Exit Charging"
                 End If
                 If DoExitSoc Then
-                    EventLog.WriteEntry(String.Format("Exiting Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString), EventLogEntryType.Information, 505)
-                    Dim ChargeSettings As New Operation With {.backup_reserve_percent = My.Settings.PWMinBackupPercentage, .mode = "self_consumption"}
-                    Dim NewChargeSettings As Operation = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
-                    Dim APIResult As Integer = GetPWSecureConfigCompleted("config/completed")
-                    If APIResult = 202 Then
-                        PreCharging = False
-                        EventLog.WriteEntry(String.Format("Exited Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 508)
-                        Intent = "Self Consumption"
-                    Else
-                        EventLog.WriteEntry(String.Format("Failed to exit Charge Mode: SOC={0}, Required={1}, Shortfall={2}, NewTarget={3}, Mode={4}, BackupPercentage={5}, APIResult = {6}", SOC.percentage.ToString, RawTargetSOC.ToString, ShortfallInsolation.ToString, PreChargeTargetSOC.ToString, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Warning, 509)
-                        Intent = "Trying to Exit Charging"
-                    End If
+                    SetPWMode("", "Enter", "Self Consumption", My.Settings.PWMinBackupPercentage, "self_consumption", Intent)
+                    PreCharging = False
+                    OnStandby = False
                 End If
+            ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And (OperationDOW = DayOfWeek.Saturday Or OperationDOW = DayOfWeek.Sunday) And Not PreCharging And (Not OnStandby Or SOC.percentage > LastStandbyTarget) Then
+                SetPWMode("Current SOC above weekend target, standby on target enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent)
+                OnStandby = True
+            ElseIf My.Settings.PWWeekendStandbySunset And InvokedTime >= Sundown And Not PreCharging And (Not OnStandby Or SOC.percentage > LastStandbyTarget) Then
+                SetPWMode("Current time after sunset, standby on sunset enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent)
+                OnStandby = True
             Else
-                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage.ToString), EventLogEntryType.Information, 503)
+                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage), EventLogEntryType.Information, 503)
             End If
         Catch Ex As Exception
             EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 510)
@@ -551,11 +580,13 @@ Public Class PowerwallService
 #Region "Six Second Logger"
     Sub GetObservationAndStore()
         Try
-            MeterReading = GetPWAPIResult(Of MeterAggregates)("meters/aggregates")
+            SyncLock PWLock
+                MeterReading = GetPWAPIResult(Of MeterAggregates)("meters/aggregates")
+                SOC = GetPWAPIResult(Of SOC)("system_status/soe")
+            End SyncLock
             Dim ObservationTime As Date = MeterReading.site.last_communication_time
-            SOC = GetPWAPIResult(Of SOC)("system_status/soe")
-            FirstReadingsAvailable = True
-            If My.Settings.LogData Then
+            If ObservationTime > Now.Date Then FirstReadingsAvailable = True
+            If My.Settings.LogData And FirstReadingsAvailable Then
                 With MeterReading
                     SyncLock DBLock
                         Try
@@ -604,6 +635,65 @@ Public Class PowerwallService
     End Function
 #End Region
 #Region "Powerwall Control"
+    Private Sub SetPWMode(ActionMessage As String, ActionMode As String, ActionType As String, Target As Double, Mode As String, ByRef Intent As String)
+        Dim RunningResult As Integer
+        Try
+            If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format(ActionMessage & " Current SOC={0}, Current Target={1}", SOC.percentage, Target), EventLogEntryType.Information, 511)
+            Intent = ActionType
+            If Not PreCharging Then
+                Dim ChargeSettings As New Operation With {.backup_reserve_percent = CInt(Target), .mode = Mode}
+                Dim NewChargeSettings As Operation
+                Dim APIResult As Integer
+                SyncLock PWLock
+                    NewChargeSettings = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
+                    APIResult = GetPWSecureConfigCompleted("config/completed")
+                    RunningResult = GetPWRunning()
+                End SyncLock
+                If APIResult = 202 Then
+                    EventLog.WriteEntry(String.Format("{5}ed {6} Mode: Current SOC={0}, Current Target={1}, Set Mode={2}, Set Backup Percentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Information, 512)
+                    AboveMinBackup = (NewChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
+                    If ActionType = "Standby" Then
+                        LastStandbyTarget = NewChargeSettings.backup_reserve_percent + 2
+                    End If
+                    Intent = ActionType
+                Else
+                    EventLog.WriteEntry(String.Format("Failed to {5} {6} Mode: Current SOC={0}, Attempted Target={1}, Mode={2}, BackupPercentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Warning, 513)
+                    Intent = String.Format("Trying to {0} {1}", ActionMode, ActionType)
+                End If
+            End If
+        Catch ex As Exception
+            SyncLock PWLock
+                RunningResult = GetPWRunning()
+            End SyncLock
+        End Try
+    End Sub
+    Private Function GetPWRunning() As Integer
+        GetPWRunning = GetUnsecured(My.Settings.PWGatewayAddress & "/api/sitemaster/run")
+    End Function
+    Private Sub GetPWMode()
+        Dim RunningResult As Integer
+        Try
+            If Not PreCharging Then
+                Dim APIResult As Integer
+                Dim CurrentChargeSettings As Operation
+                SyncLock PWLock
+                    CurrentChargeSettings = GetPWSecureAPIResult(Of Operation)("operation", ForceReLogin:=True)
+                    APIResult = GetPWSecureConfigCompleted("config/completed")
+                    RunningResult = GetPWRunning()
+                End SyncLock
+                If APIResult = 202 Then
+                    EventLog.WriteEntry(String.Format("Current PW Mode={0}, BackupPercentage={1}, APIResult = {2}", CurrentChargeSettings.mode, CurrentChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Information, 512)
+                    AboveMinBackup = (CurrentChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
+                Else
+                    EventLog.WriteEntry("Failed to obtain current operation mode", EventLogEntryType.Warning, 513)
+                End If
+            End If
+        Catch ex As Exception
+            SyncLock PWLock
+                RunningResult = GetPWRunning()
+            End SyncLock
+        End Try
+    End Sub
     Function GetPWSecureAPIResult(Of JSONType)(API As String, Optional ForceReLogin As Boolean = False) As JSONType
         Try
             PWToken = LoginPWLocal(ForceReLogin:=ForceReLogin)

@@ -550,7 +550,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
         Public ReadOnly Property VerboseLogging() As Boolean
             Get
                 Return CType(Me("VerboseLogging"),Boolean)
@@ -563,6 +563,60 @@ Namespace My
         Public ReadOnly Property PWControlEnabled() As Boolean
             Get
                 Return CType(Me("PWControlEnabled"),Boolean)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+        Public ReadOnly Property DebugLogging() As Boolean
+            Get
+                Return CType(Me("DebugLogging"),Boolean)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+        Public ReadOnly Property PWOvernightStandby() As Boolean
+            Get
+                Return CType(Me("PWOvernightStandby"),Boolean)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+        Public ReadOnly Property PWWeekendStandbySunset() As Boolean
+            Get
+                Return CType(Me("PWWeekendStandbySunset"),Boolean)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("70")>  _
+        Public ReadOnly Property PWWeekendStandbyTarget() As Byte
+            Get
+                Return CType(Me("PWWeekendStandbyTarget"),Byte)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+        Public ReadOnly Property PWWeekendStandbyOnTarget() As Boolean
+            Get
+                Return CType(Me("PWWeekendStandbyOnTarget"),Boolean)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("17500")>  _
+        Public ReadOnly Property PWPeakConsumptionWeekend() As String
+            Get
+                Return CType(Me("PWPeakConsumptionWeekend"),String)
             End Get
         End Property
     End Class
