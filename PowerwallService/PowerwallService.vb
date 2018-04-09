@@ -44,6 +44,7 @@ Public Class PowerwallService
     Shared OperationStartHour As Integer
     Shared OperationEndHour As Integer
     Shared OperationHours As Double
+    Shared OperationLockout As DateTime = DateAdd(DateInterval.Hour, -2, Now)
     Shared IsCharging As Boolean = False
     Shared LastPeriodForecast As Forecast
     Shared CurrentPeriodForecast As Forecast
@@ -398,10 +399,11 @@ Public Class PowerwallService
         Try
             If InvokedTime > DateAdd(DateInterval.Minute, -20, OperationEnd) And (PreCharging Or AboveMinBackup Or OnStandby) Then
                 DoExitSoc = True
+                OperationLockout = OperationEnd
                 EventLog.WriteEntry(String.Format("Reached end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, PreChargeTargetSOC), EventLogEntryType.Information, 504)
                 Intent = "Stop Charging"
             End If
-            If (InvokedTime >= OperationStart And InvokedTime < OperationEnd) Or DoExitSoc Then
+            If (InvokedTime >= OperationStart And InvokedTime < OperationEnd And InvokedTime < OperationLockout) Or DoExitSoc Then
                 If My.Settings.VerboseLogging And Not DoExitSoc Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, PreChargeTargetSOC), EventLogEntryType.Information, 500)
                 If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0}, OperationStart={1}, OperationEnd={2}", InvokedTime, OperationStart, OperationStart), EventLogEntryType.Information, 713)
                 If My.Settings.PWOvernightStandby And SOC.percentage >= (My.Settings.PWMorningBuffer + (ShortfallInsolation / My.Settings.PWCapacity * 100)) And Not PreCharging And Not OnStandby And Not DoExitSoc Then
@@ -430,7 +432,7 @@ Public Class PowerwallService
             ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And (OperationDOW = DayOfWeek.Saturday Or OperationDOW = DayOfWeek.Sunday) And Not PreCharging And (Not OnStandby Or SOC.percentage > LastStandbyTarget) Then
                 SetPWMode("Current SOC above weekend target, standby on target enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent)
                 OnStandby = True
-            ElseIf My.Settings.PWWeekendStandbySunset And InvokedTime >= Sundown And Not PreCharging And (Not OnStandby Or SOC.percentage > LastStandbyTarget) Then
+            ElseIf My.Settings.PWWeekendStandbySunset And InvokedTime >= Sundown And (OperationDOW = DayOfWeek.Saturday Or OperationDOW = DayOfWeek.Sunday) And Not PreCharging And (Not OnStandby Or SOC.percentage > LastStandbyTarget) Then
                 SetPWMode("Current time after sunset, standby on sunset enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent)
                 OnStandby = True
             Else
