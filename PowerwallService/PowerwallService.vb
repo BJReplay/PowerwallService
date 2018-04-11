@@ -407,7 +407,7 @@ Public Class PowerwallService
                 OperationLockout = OperationEnd
                 EventLog.WriteEntry(String.Format("Reaching end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, NoStandbyTargetSOC), EventLogEntryType.Information, 504)
                 DoExitCharging(Intent)
-            ElseIf (InvokedTime >= OperationStart And InvokedTime < OperationEnd And InvokedTime < OperationLockout) Then
+            ElseIf (InvokedTime >= OperationStart And InvokedTime < OperationEnd And InvokedTime > OperationLockout) Then
                 If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 500)
                 If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0}, OperationStart={1}, OperationEnd={2}", InvokedTime, OperationStart, OperationStart), EventLogEntryType.Information, 713)
                 If My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And Not OnStandby Then
