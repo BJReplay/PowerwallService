@@ -215,7 +215,7 @@ Public Class PowerwallService
         Threading.Thread.Sleep((SecondOffset * 1000) - MilliSeconds)
     End Sub
     Sub AggregateToMinute()
-        If My.Settings.VerboseLogging Then EventLog.WriteEntry("Powerwall Service Running at " & Now.ToString, EventLogEntryType.Information, 200)
+        If My.Settings.DebugLogging Then EventLog.WriteEntry("Powerwall Service Running at " & Now.ToString, EventLogEntryType.Information, 200)
         If My.Settings.LogData Then
             Try
                 SyncLock DBLock
