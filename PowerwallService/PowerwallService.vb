@@ -46,6 +46,7 @@ Public Class PowerwallService
     Shared OperationHours As Double
     Shared OperationLockout As DateTime = DateAdd(DateInterval.Hour, -2, Now)
     Shared OperationAllDayOffPeak As Boolean
+    Shared NextDayAllDayOffPeak As Boolean
     Shared IsCharging As Boolean = False
     Shared LastPeriodForecast As Forecast
     Shared CurrentPeriodForecast As Forecast
@@ -57,6 +58,7 @@ Public Class PowerwallService
     Shared AsAtSunrise As Result
     Shared DBLock As New Object
     Shared PWLock As New Object
+    Shared SkipObservation As Boolean = False
 #End Region
 #Region "Timer Handlers"
     Protected Async Sub OnObservationTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
@@ -148,9 +150,9 @@ Public Class PowerwallService
                     RunningResult = GetPWRunning()
                 End SyncLock
                 If APIResult = 202 Then
-                    EventLog.WriteEntry(String.Format("Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Information, 600)
+                    EventLog.WriteEntry(String.Format("Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Information, 600)
                 Else
-                    EventLog.WriteEntry(String.Format("Failed to Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult.ToString), EventLogEntryType.Warning, 601)
+                    EventLog.WriteEntry(String.Format("Failed to Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Warning, 601)
                 End If
             Catch ex As Exception
                 SyncLock PWLock
@@ -215,7 +217,7 @@ Public Class PowerwallService
         Threading.Thread.Sleep((SecondOffset * 1000) - MilliSeconds)
     End Sub
     Sub AggregateToMinute()
-        If My.Settings.DebugLogging Then EventLog.WriteEntry("Powerwall Service Running at " & Now.ToString, EventLogEntryType.Information, 200)
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Powerwall Service Running at {0:yyyy-MM-dd HH:mm}", Now), EventLogEntryType.Information, 200)
         If My.Settings.LogData Then
             Try
                 SyncLock DBLock
@@ -228,7 +230,7 @@ Public Class PowerwallService
     End Sub
     Public Sub SetOperationHours(InvokedTime As DateTime)
         Dim TZI As TimeZoneInfo = TimeZoneInfo.Local
-        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("SetOperationHours Invoked at {0}", InvokedTime), EventLogEntryType.Information, 700)
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("SetOperationHours Invoked at {0:yyyy-MM-dd HH:mm}", InvokedTime), EventLogEntryType.Information, 700)
         OperationDOW = InvokedTime.DayOfWeek
         If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("SetOperationHours DOW {0}", OperationDOW), EventLogEntryType.Information, 701)
         OperationAllDayOffPeak = False
@@ -238,8 +240,8 @@ Public Class PowerwallService
                 OperationStartHour = My.Settings.TariffPeakEndWeekend
                 OperationEndHour = My.Settings.TariffPeakStartWeekend
             Else
-                OperationStartHour = 21
-                OperationEndHour = 9
+                OperationStartHour = 0
+                OperationEndHour = 0
                 OperationAllDayOffPeak = True
             End If
         Else
@@ -253,33 +255,39 @@ Public Class PowerwallService
             If OperationEndHour > 23 Then OperationEndHour -= CByte(24)
         End If
         If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Operation Hours From {0} To {1}", OperationStartHour, OperationEndHour), EventLogEntryType.Information, 703)
-        Dim OffPeakStartsBeforeMidnight As Boolean = (OperationStartHour > OperationEndHour)
+        Dim OffPeakStartsBeforeMidnight As Boolean = ((OperationStartHour > OperationEndHour) Or (OperationStartHour = 0 And OperationEndHour = 0))
         OperationHours = OperationEndHour - OperationStartHour
         If OperationHours <= 0 Then OperationHours += 24
         If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Operation Duration {0}", OperationHours), EventLogEntryType.Information, 706)
         OperationStart = New DateTime(InvokedTime.Year, InvokedTime.Month, InvokedTime.Day, OperationStartHour, 0, 0)
-        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Initial Operation Start {0}", OperationStart), EventLogEntryType.Information, 707)
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Initial Operation Start {0:yyyy-MM-dd HH:mm}", OperationStart), EventLogEntryType.Information, 707)
         If InvokedTime.Hour > OperationEndHour And Not OffPeakStartsBeforeMidnight Then
             OperationStart = DateAdd(DateInterval.Day, 1, OperationStart)
-            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Operation Start {0}", OperationStart), EventLogEntryType.Information, 708)
+            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Operation Start {0:yyyy-MM-dd HH:mm}", OperationStart), EventLogEntryType.Information, 708)
         End If
         If InvokedTime.Hour >= 0 And InvokedTime.Hour < OperationEndHour + 1 And OffPeakStartsBeforeMidnight Then
             OperationStart = DateAdd(DateInterval.Day, -1, OperationStart)
-            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Operation Start {0}", OperationStart), EventLogEntryType.Information, 709)
+            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Operation Start {0:yyyy-MM-dd HH:mm}", OperationStart), EventLogEntryType.Information, 709)
         End If
         OperationEnd = New DateTime(OperationStart.Year, OperationStart.Month, OperationStart.Day, OperationEndHour, 0, 0)
-        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Initial Operation End {0}", OperationEnd), EventLogEntryType.Information, 710)
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Initial Operation End {0:yyyy-MM-dd HH:mm}", OperationEnd), EventLogEntryType.Information, 710)
         If OffPeakStartsBeforeMidnight Then
             OperationEnd = DateAdd(DateInterval.Day, 1, OperationEnd)
-            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Operation End {0}", OperationEnd), EventLogEntryType.Information, 711)
+            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Operation End {0:yyyy-MM-dd HH:mm}", OperationEnd), EventLogEntryType.Information, 711)
+        End If
+        If (OperationEnd.DayOfWeek = DayOfWeek.Saturday Or OperationEnd.DayOfWeek = DayOfWeek.Sunday) And Not My.Settings.TariffPeakOnWeekends Then
+            If My.Settings.DebugLogging Then EventLog.WriteEntry("End of Operaton is All Off Peak Weekend", EventLogEntryType.Information, 714)
+            NextDayAllDayOffPeak = True
+        Else
+            NextDayAllDayOffPeak = False
         End If
         If Sunrise.Date <> InvokedTime.Date Then
-            Dim SunriseSunsetData As Result = GetSunriseSunset(Of Result)(InvokedTime)
-            Sunrise = SunriseSunsetData.results.civil_twilight_begin.ToLocalTime
-            Sunset = SunriseSunsetData.results.civil_twilight_end.ToLocalTime
-            Sundown = SunriseSunsetData.results.sunset.ToLocalTime
-        End If
-        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Start: {0} End: {1}", OperationStart, OperationEnd), EventLogEntryType.Information, 713)
+                Dim SunriseSunsetData As Result = GetSunriseSunset(Of Result)(InvokedTime)
+                Sunrise = SunriseSunsetData.results.civil_twilight_begin.ToLocalTime
+                Sunset = SunriseSunsetData.results.civil_twilight_end.ToLocalTime
+                Sundown = SunriseSunsetData.results.sunset.ToLocalTime
+            End If
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Start: {0:yyyy-MM-dd HH:mm} End: {1:yyyy-MM-dd HH:mm}", OperationStart, OperationEnd), EventLogEntryType.Information, 713)
     End Sub
     Sub DoPerMinuteTasks()
         Dim Minute As Integer = Now.Minute
@@ -304,17 +312,31 @@ Public Class PowerwallService
         AggregateToMinute()
     End Sub
     Function GetUnsecuredJSONResult(Of JSONType)(URL As String) As JSONType
+        Dim response As HttpWebResponse
         Try
             Dim request As WebRequest = WebRequest.Create(URL)
-            Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
-            Dim dataStream As Stream = response.GetResponseStream()
-            Dim reader As StreamReader = New StreamReader(dataStream)
-            Dim responseFromServer As String = reader.ReadToEnd()
-            GetUnsecuredJSONResult = JsonConvert.DeserializeObject(Of JSONType)(responseFromServer)
-            reader.Close()
-            response.Close()
+            Try
+                response = CType(request.GetResponse(), HttpWebResponse)
+            Catch ex As WebException
+                Dim resp As HttpWebResponse = CType(ex.Response, HttpWebResponse)
+                If resp.StatusCode <> 502 Then
+                    EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
+                End If
+                Return Nothing
+            Catch ex As Exception
+                Return Nothing
+            End Try
+            If Not response Is Nothing Then
+                Dim dataStream As Stream = response.GetResponseStream()
+                Dim reader As StreamReader = New StreamReader(dataStream)
+                Dim responseFromServer As String = reader.ReadToEnd()
+                reader.Close()
+                response.Close()
+                Return JsonConvert.DeserializeObject(Of JSONType)(responseFromServer)
+            End If
         Catch Ex As Exception
             EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+            Return Nothing
         End Try
     End Function
     Function GetUnsecured(URI As String) As Integer
@@ -409,31 +431,45 @@ Public Class PowerwallService
                 DoExitCharging(Intent)
             ElseIf (InvokedTime >= OperationStart And InvokedTime < OperationEnd And InvokedTime > OperationLockout) Then
                 If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 500)
-                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0}, OperationStart={1}, OperationEnd={2}", InvokedTime, OperationStart, OperationStart), EventLogEntryType.Information, 713)
-                If My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And Not OnStandby Then
-                    If SetPWMode("Current SOC above required morning SOC, standby mode enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OperationStart, OperationEnd), EventLogEntryType.Information, 713)
+                If NextDayAllDayOffPeak And (Not OnStandby Or SOC.percentage > LastStandbyTarget) Then
+                    If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
-                ElseIf (SOC.percentage < StandbyTargetSOC And OnStandby) Or (SOC.percentage < NoStandbyTargetSOC And Not OnStandby And Not PreCharging) Then
+                ElseIf My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastStandbyTarget) Then
+                    If SetPWMode("Current SOC above required morning SOC, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                        OnStandby = True
+                        PreCharging = False
+                    End If
+                ElseIf (SOC.percentage < StandbyTargetSOC And OnStandby And Not OperationAllDayOffPeak And Not NextDayAllDayOffPeak) Or (SOC.percentage < NoStandbyTargetSOC And Not OnStandby And Not PreCharging) Then
                     If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 501)
                     If SetPWMode("Current SOC below required morning SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
                         PreCharging = True
+                        OnStandby = False
                     End If
-                ElseIf SOC.percentage > (NoStandbyTargetSOC + 5) And PreCharging And Not OnStandby Then
-                        EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
+                ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby And My.Settings.PWOvernightStandby Then
+                    EventLog.WriteEntry(String.Format("Current SOC above required setting and Standby Mode Enabled: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 505)
+                    If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                        OnStandby = True
+                        PreCharging = False
+                    End If
+                ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby Then
+                    EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
                     DoExitCharging(Intent)
                 End If
             ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And OperationAllDayOffPeak And Not PreCharging And (Not OnStandby Or SOC.percentage > LastStandbyTarget) Then
                 If SetPWMode("Current SOC above weekend target, standby on target enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
                     OnStandby = True
+                    PreCharging = False
                 End If
             ElseIf My.Settings.PWWeekendStandbySunset And InvokedTime >= Sundown And OperationAllDayOffPeak And Not PreCharging And (Not OnStandby Or SOC.percentage > LastStandbyTarget) Then
                 If SetPWMode("Current time after sunset, standby on sunset enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
                     OnStandby = True
+                    PreCharging = False
                 End If
             Else
-                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage), EventLogEntryType.Information, 503)
+                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage), EventLogEntryType.Information, 503)
             End If
         Catch Ex As Exception
             EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 510)
@@ -446,13 +482,6 @@ Public Class PowerwallService
             Catch ex As Exception
 
             End Try
-        End If
-    End Sub
-    Private Sub DoExitCharging(ByRef Intent As String)
-        If SetPWMode("Exit Charge or Standby Mode", "Enter", "Self Consumption", My.Settings.PWMinBackupPercentage, "self_consumption", Intent) = 202 Then
-            PreCharging = False
-            OnStandby = False
-            AboveMinBackup = False
         End If
     End Sub
     Sub GetForecasts()
@@ -496,13 +525,13 @@ Public Class PowerwallService
                 Next
                 Dim ForecastLogEntry As String = "Three Day Forecast" & vbCrLf
                 With CurrentDayForecast
-                    ForecastLogEntry += vbCrLf & String.Format("Date: {0} Total: {1} Morning: {2}", .ForecastDate.ToString, .PVEstimate.ToString, .MorningForecast.ToString)
+                    ForecastLogEntry += vbCrLf & String.Format("Date: {0:yyyy-MM-dd} Total: {1} Morning: {2}", .ForecastDate, .PVEstimate, .MorningForecast)
                 End With
                 With NextDayForecast
-                    ForecastLogEntry += vbCrLf & String.Format("Date: {0} Total: {1} Morning: {2}", .ForecastDate.ToString, .PVEstimate.ToString, .MorningForecast.ToString)
+                    ForecastLogEntry += vbCrLf & String.Format("Date: {0:yyyy-MM-dd} Total: {1} Morning: {2}", .ForecastDate, .PVEstimate, .MorningForecast)
                 End With
                 With SecondDayForecast
-                    ForecastLogEntry += vbCrLf & String.Format("Date: {0} Total: {1} Morning: {2}", .ForecastDate.ToString, .PVEstimate.ToString, .MorningForecast.ToString)
+                    ForecastLogEntry += vbCrLf & String.Format("Date: {0:yyyy-MM-dd} Total: {1} Morning: {2}", .ForecastDate, .PVEstimate, .MorningForecast)
                 End With
                 EventLog.WriteEntry(ForecastLogEntry, EventLogEntryType.Information, 1000)
             End If
@@ -586,56 +615,70 @@ Public Class PowerwallService
 #End Region
 #Region "Six Second Logger"
     Sub GetObservationAndStore()
-        Try
-            SyncLock PWLock
-                MeterReading = GetPWAPIResult(Of MeterAggregates)("meters/aggregates")
-                SOC = GetPWAPIResult(Of SOC)("system_status/soe")
-            End SyncLock
-            Dim ObservationTime As Date = MeterReading.site.last_communication_time
-            If ObservationTime > Now.Date Then FirstReadingsAvailable = True
-            If My.Settings.LogData And FirstReadingsAvailable Then
-                With MeterReading
-                    SyncLock DBLock
-                        Try
-                            CompactTA.Insert(ObservationTime.ToUniversalTime, ObservationTime, SOC.percentage, .battery.instant_average_voltage, .site.instant_average_voltage, .battery.instant_power, .site.instant_power, .solar.instant_power, .load.instant_power)
-                        Catch Ex As Exception
-                            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
-                        End Try
-                        If Not My.Settings.LogAzureOnly Then
-                            Try
-                                CompactTALocal.Insert(ObservationTime.ToUniversalTime, ObservationTime, SOC.percentage, .battery.instant_average_voltage, .site.instant_average_voltage, .battery.instant_power, .site.instant_power, .solar.instant_power, .load.instant_power)
-                            Catch Ex As Exception
-                                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
-                            End Try
-                        End If
-                        If Not My.Settings.LogCompactOnly Then
-                            Try
-                                Dim ObservationID As Integer = CInt(ObsTA.InsertAndReturnIdentity(ObservationTime.ToUniversalTime, ObservationTime))
-                                'ObsTA.Transaction.Commit()
-                                SolarTA.Insert(.solar.last_communication_time, .solar.instant_power, .solar.instant_reactive_power, .solar.instant_apparent_power, .solar.frequency, .solar.energy_exported, .solar.energy_imported, .solar.instant_average_voltage, .solar.instant_total_current, .solar.i_a_current, .solar.i_b_current, .solar.i_c_current, ObservationID)
-                                BatteryTA.Insert(.battery.last_communication_time, .battery.instant_power, .battery.instant_reactive_power, .battery.instant_apparent_power, .battery.frequency, .battery.energy_exported, .battery.energy_imported, .battery.instant_average_voltage, .battery.instant_total_current, .battery.i_a_current, .battery.i_b_current, .battery.i_c_current, ObservationID)
-                                SiteTA.Insert(.site.last_communication_time, .site.instant_power, .site.instant_reactive_power, .site.instant_apparent_power, .site.frequency, .site.energy_exported, .site.energy_imported, .site.instant_average_voltage, .site.instant_total_current, .site.i_a_current, .site.i_b_current, .site.i_c_current, ObservationID)
-                                LoadTA.Insert(.load.last_communication_time, .load.instant_power, .load.instant_reactive_power, .load.instant_apparent_power, .load.frequency, .load.energy_exported, .load.energy_imported, .load.instant_average_voltage, .load.instant_total_current, .load.i_a_current, .load.i_b_current, .load.i_c_current, ObservationID)
-                                SOCTA.Insert(SOC.percentage, ObservationID)
-                            Catch Ex As Exception
-                                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
-                            End Try
-                        End If
-                    End SyncLock
-                End With
-                If My.Settings.PBILiveLoggingEndpoint <> String.Empty Then
+        If Not SkipObservation Then
+            SkipObservation = True
+            Dim ObservationTime As DateTime
+            Dim EmptyDate As DateTime
+            Dim GotResults As Boolean = False
+            Try
+                SyncLock PWLock
                     Try
-                        Dim PBIRows As New PBILiveLogging With {.Rows = New List(Of SixSecondOb)}
-                        PBIRows.Rows.Add(New SixSecondOb With {.AsAt = ObservationTime, .Battery = MeterReading.battery.instant_power, .Grid = MeterReading.site.instant_power, .Load = MeterReading.load.instant_power, .SOC = SOC.percentage, .Solar = CSng(IIf(MeterReading.solar.instant_power < 0, 0, MeterReading.solar.instant_power)), .Voltage = MeterReading.battery.instant_average_voltage})
-                        Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBILiveLoggingEndpoint, PBIRows)
-                    Catch ex As Exception
+                        MeterReading = GetPWAPIResult(Of MeterAggregates)("meters/aggregates")
+                        SOC = GetPWAPIResult(Of SOC)("system_status/soe")
+                        ObservationTime = MeterReading.site.last_communication_time
+                    Catch Ex As Exception
 
                     End Try
+                End SyncLock
+                If ObservationTime > EmptyDate Then
+                    FirstReadingsAvailable = True
+                    GotResults = True
                 End If
-            End If
-        Catch Ex As Exception
-            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
-        End Try
+                If My.Settings.LogData And GotResults Then
+                    With MeterReading
+                        SyncLock DBLock
+                            Try
+                                CompactTA.Insert(ObservationTime.ToUniversalTime, ObservationTime, SOC.percentage, .battery.instant_average_voltage, .site.instant_average_voltage, .battery.instant_power, .site.instant_power, .solar.instant_power, .load.instant_power)
+                            Catch Ex As Exception
+                                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+                            End Try
+                            If Not My.Settings.LogAzureOnly Then
+                                Try
+                                    CompactTALocal.Insert(ObservationTime.ToUniversalTime, ObservationTime, SOC.percentage, .battery.instant_average_voltage, .site.instant_average_voltage, .battery.instant_power, .site.instant_power, .solar.instant_power, .load.instant_power)
+                                Catch Ex As Exception
+                                    EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+                                End Try
+                            End If
+                            If Not My.Settings.LogCompactOnly Then
+                                Try
+                                    Dim ObservationID As Integer = CInt(ObsTA.InsertAndReturnIdentity(ObservationTime.ToUniversalTime, ObservationTime))
+                                    'ObsTA.Transaction.Commit()
+                                    SolarTA.Insert(.solar.last_communication_time, .solar.instant_power, .solar.instant_reactive_power, .solar.instant_apparent_power, .solar.frequency, .solar.energy_exported, .solar.energy_imported, .solar.instant_average_voltage, .solar.instant_total_current, .solar.i_a_current, .solar.i_b_current, .solar.i_c_current, ObservationID)
+                                    BatteryTA.Insert(.battery.last_communication_time, .battery.instant_power, .battery.instant_reactive_power, .battery.instant_apparent_power, .battery.frequency, .battery.energy_exported, .battery.energy_imported, .battery.instant_average_voltage, .battery.instant_total_current, .battery.i_a_current, .battery.i_b_current, .battery.i_c_current, ObservationID)
+                                    SiteTA.Insert(.site.last_communication_time, .site.instant_power, .site.instant_reactive_power, .site.instant_apparent_power, .site.frequency, .site.energy_exported, .site.energy_imported, .site.instant_average_voltage, .site.instant_total_current, .site.i_a_current, .site.i_b_current, .site.i_c_current, ObservationID)
+                                    LoadTA.Insert(.load.last_communication_time, .load.instant_power, .load.instant_reactive_power, .load.instant_apparent_power, .load.frequency, .load.energy_exported, .load.energy_imported, .load.instant_average_voltage, .load.instant_total_current, .load.i_a_current, .load.i_b_current, .load.i_c_current, ObservationID)
+                                    SOCTA.Insert(SOC.percentage, ObservationID)
+                                Catch Ex As Exception
+                                    EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+                                End Try
+                            End If
+                        End SyncLock
+                    End With
+                    If My.Settings.PBILiveLoggingEndpoint <> String.Empty Then
+                        Try
+                            Dim PBIRows As New PBILiveLogging With {.Rows = New List(Of SixSecondOb)}
+                            PBIRows.Rows.Add(New SixSecondOb With {.AsAt = ObservationTime, .Battery = MeterReading.battery.instant_power, .Grid = MeterReading.site.instant_power, .Load = MeterReading.load.instant_power, .SOC = SOC.percentage, .Solar = CSng(IIf(MeterReading.solar.instant_power < 0, 0, MeterReading.solar.instant_power)), .Voltage = MeterReading.battery.instant_average_voltage})
+                            Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBILiveLoggingEndpoint, PBIRows)
+                        Catch ex As Exception
+
+                        End Try
+                    End If
+                End If
+            Catch Ex As Exception
+                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+            End Try
+            SkipObservation = False
+        End If
     End Sub
     Function GetPWAPIResult(Of JSONType)(API As String) As JSONType
         Return GetUnsecuredJSONResult(Of JSONType)(My.Settings.PWGatewayAddress & "/api/" & API)
@@ -644,6 +687,7 @@ Public Class PowerwallService
 #Region "Powerwall Control"
     Private Function SetPWMode(ActionMessage As String, ActionMode As String, ActionType As String, Target As Double, Mode As String, ByRef Intent As String) As Integer
         Dim RunningResult As Integer
+        SkipObservation = True
         Try
             If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format(ActionMessage & " Current SOC={0}, Current Target={1}", SOC.percentage, Target), EventLogEntryType.Information, 511)
             Intent = ActionType
@@ -673,12 +717,14 @@ Public Class PowerwallService
             End SyncLock
             Return 0
         End Try
+        SkipObservation = False
     End Function
     Private Function GetPWRunning() As Integer
         GetPWRunning = GetUnsecured(My.Settings.PWGatewayAddress & "/api/sitemaster/run")
     End Function
     Private Sub GetPWMode()
         Dim RunningResult As Integer
+        SkipObservation = True
         Try
             If Not PreCharging Then
                 Dim APIResult As Integer
@@ -700,6 +746,7 @@ Public Class PowerwallService
                 RunningResult = GetPWRunning()
             End SyncLock
         End Try
+        SkipObservation = False
     End Sub
     Function GetPWSecureAPIResult(Of JSONType)(API As String, Optional ForceReLogin As Boolean = False) As JSONType
         Try
@@ -789,6 +836,15 @@ Public Class PowerwallService
         End If
         Return PWToken
     End Function
+    Private Sub DoExitCharging(ByRef Intent As String)
+        SkipObservation = True
+        If SetPWMode("Exit Charge or Standby Mode", "Enter", "Self Consumption", My.Settings.PWMinBackupPercentage, "self_consumption", Intent) = 202 Then
+            PreCharging = False
+            OnStandby = False
+            AboveMinBackup = False
+        End If
+        SkipObservation = False
+    End Sub
 #End Region
 #Region "PVOutput"
     Private Sub DoBackFill(AsAt As DateTime)
