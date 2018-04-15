@@ -187,9 +187,6 @@
     <Setting Name="PWOvernightStandby" Type="System.Boolean" Scope="Application">
       <Value Profile="(Default)">False</Value>
     </Setting>
-    <Setting Name="PWWeekendStandbySunset" Type="System.Boolean" Scope="Application">
-      <Value Profile="(Default)">False</Value>
-    </Setting>
     <Setting Name="PWWeekendStandbyTarget" Type="System.Byte" Scope="Application">
       <Value Profile="(Default)">70</Value>
     </Setting>
