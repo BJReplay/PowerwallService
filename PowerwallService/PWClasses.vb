@@ -171,8 +171,6 @@ Public Class SolCast
         Public Property ForecastDate As Date
         Public Property PVEstimate As Single
         Public Property MorningForecast As Single
-        Public Property SunRise As DateTime
-        Public Property SunSet As DateTime
     End Class
 End Class
 Public Class PVOutput

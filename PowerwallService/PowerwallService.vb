@@ -52,9 +52,10 @@ Public Class PowerwallService
     Shared CurrentPeriodForecast As Forecast
     Shared PVForecast As OutputForecast
     Shared CurrentDOW As DayOfWeek
+    Shared CivilTwilightSunrise As DateTime
+    Shared CivilTwilightSunset As DateTime
     Shared Sunrise As DateTime
     Shared Sunset As DateTime
-    Shared Sundown As DateTime
     Shared AsAtSunrise As Result
     Shared DBLock As New Object
     Shared PWLock As New Object
@@ -283,9 +284,12 @@ Public Class PowerwallService
         End If
         If Sunrise.Date <> InvokedTime.Date Then
             Dim SunriseSunsetData As Result = GetSunriseSunset(Of Result)(InvokedTime)
-            Sunrise = SunriseSunsetData.results.civil_twilight_begin.ToLocalTime
-            Sunset = SunriseSunsetData.results.civil_twilight_end.ToLocalTime
-            Sundown = SunriseSunsetData.results.sunset.ToLocalTime
+            With SunriseSunsetData.results
+                CivilTwilightSunrise = .civil_twilight_begin.ToLocalTime
+                CivilTwilightSunset = .civil_twilight_end.ToLocalTime
+                Sunrise = .sunrise.ToLocalTime
+                Sunset = .sunset.ToLocalTime
+            End With
         End If
         If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Start: {0:yyyy-MM-dd HH:mm} End: {1:yyyy-MM-dd HH:mm}", OffPeakStart, PeakStart), EventLogEntryType.Information, 713)
     End Sub
@@ -355,7 +359,7 @@ Public Class PowerwallService
     End Function
     Function CheckSunIsUp(AsAt As Date) As Boolean
         If AsAt.Date = Now.Date Then
-            If AsAt > Sunrise And AsAt < Sunset Then Return True
+            If AsAt > CivilTwilightSunrise And AsAt < CivilTwilightSunset Then Return True
         Else
             If AsAtSunrise Is Nothing Then
                 AsAtSunrise = GetSunriseSunset(Of Result)(AsAt)
@@ -406,13 +410,13 @@ Public Class PowerwallService
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Waiting for Off Peak"
         ElseIf InvokedTime > OffPeakStart And InvokedTime < PeakStart Then
-            RemainingOvernightRatio = CSng(DateDiff(DateInterval.Hour, InvokedTime, PeakStart) / OffPeakHours)
+            RemainingOvernightRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, PeakStart) + 1) / OffPeakHours)
             If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
             If RemainingOvernightRatio > 1 Then RemainingOvernightRatio = 1
             RemainingInsolationToday = NextDayForecastGeneration
             ForecastInsolationTomorrow = 0
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
-            Intent = "Thinking"
+            Intent = "Monitoring"
         End If
         RemainingOffPeak = My.Settings.PWOvernightLoad * RemainingOvernightRatio
         RawTargetSOC = My.Settings.PWMorningBuffer + CInt(RemainingOffPeak)
@@ -420,6 +424,7 @@ Public Class PowerwallService
         NoStandbyTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
         If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
         StandbyTargetSOC = My.Settings.PWMorningBuffer + (ShortfallInsolation / My.Settings.PWCapacity * 100)
+        If StandbyTargetSOC > 100 Then StandbyTargetSOC = 100
         NewTarget = CSng(IIf(My.Settings.PWOvernightStandby, StandbyTargetSOC, NoStandbyTargetSOC))
         If InvokedTime > Sunset And InvokedTime < OffPeakStart Then
             If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Then Intent = "Planning to Charge" Else Intent = "No Charging Required"
@@ -458,6 +463,12 @@ Public Class PowerwallService
                     If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
+                    End If
+                ElseIf (LastTarget < StandbyTargetSOC And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (LastTarget < NoStandbyTargetSOC And PreCharging) Then
+                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
+                    If SetPWMode("Current SOC below required morning SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
+                        PreCharging = True
+                        OnStandby = False
                     End If
                 ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby Then
                     EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
@@ -688,7 +699,9 @@ Public Class PowerwallService
     Private Function SetPWMode(ActionMessage As String, ActionMode As String, ActionType As String, Target As Double, Mode As String, ByRef Intent As String) As Integer
         Dim RunningResult As Integer
         SkipObservation = True
-        Target = Math.Round(Target) + 2
+        If Target > My.Settings.PWMinBackupPercentage Then
+            Target = Math.Round(Target) + 2
+        End If
         If Target > 100 Then Target = 100
         LastTarget = CInt(Target)
         Try
