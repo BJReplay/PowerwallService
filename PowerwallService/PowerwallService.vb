@@ -747,7 +747,7 @@ Public Class PowerwallService
                     RunningResult = GetPWRunning()
                 End SyncLock
                 If APIResult = 202 Then
-                    EventLog.WriteEntry(String.Format("Current PW Mode={0}, BackupPercentage={1}, APIResult = {2}", CurrentChargeSettings.mode, CurrentChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Information, 512)
+                    EventLog.WriteEntry(String.Format("Current PW Mode={0}, BackupPercentage={1}, APIResult = {2}", CurrentChargeSettings.mode, CurrentChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Information, 602)
                     AboveMinBackup = (CurrentChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
                 Else
                     EventLog.WriteEntry("Failed to obtain current operation mode", EventLogEntryType.Warning, 513)
