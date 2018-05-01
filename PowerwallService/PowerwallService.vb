@@ -602,38 +602,6 @@ Public Class PowerwallService
             Dim dataStream As Stream = response.GetResponseStream()
             Dim reader As StreamReader = New StreamReader(dataStream)
             responseFromServer = reader.ReadToEnd()
-
-            ' Added to correct Issue #18
-            If My.Settings.DualPVSystem Then
-                ' Deserialise the results of the first array
-                Dim Results As OutputForecast = JsonConvert.DeserializeObject(Of OutputForecast)(responseFromServer)
-
-
-                ' Request PV Data for the second array
-                Dim responseFromServer2 As String = String.Empty
-                Dim request2 As WebRequest = WebRequest.Create(String.Format(My.Settings.SolcastAddress, My.Settings.PVSystemLongitude, My.Settings.PVSystemLattitude, My.Settings.PVSystem2Capacity, My.Settings.PVSystem2Tilt, My.Settings.PVSystem2Azimuth, My.Settings.PVSystemInstallDate, My.Settings.SolcastAPIKey))
-                Dim response2 As HttpWebResponse = CType(request2.GetResponse(), HttpWebResponse)
-                Dim dataStream2 As Stream = response2.GetResponseStream()
-                Dim reader2 As StreamReader = New StreamReader(dataStream2)
-                responseFromServer2 = reader2.ReadToEnd()
-                Dim Results2 As OutputForecast = JsonConvert.DeserializeObject(Of OutputForecast)(responseFromServer2)
-
-                ' Add the results for the second array to that of the first
-                For i As Integer = 0 To Results.forecasts.Count - 1
-                    Dim newEstimate As Single = Convert.ToSingle(Results.forecasts.Item(i).pv_estimate) + Convert.ToSingle(Results2.forecasts.Item(i).pv_estimate)
-                    Results.forecasts.Item(i).pv_estimate = newEstimate
-                Next
-
-                ' Convert the combined PV Estimates back to JSON so the rest of the code will work as before
-                responseFromServer = JsonConvert.SerializeObject(Results, Formatting.None)
-
-                EventLog.WriteEntry(responseFromServer, EventLogEntryType.Error, 666)
-
-                reader2.Close()
-                response2.Close()
-            End If
-
-
             If My.Settings.LogData Then
                 Try
                     SyncLock DBLock
