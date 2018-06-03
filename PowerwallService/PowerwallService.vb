@@ -850,7 +850,7 @@ Public Class PowerwallService
                 Dim LoginRequest As New LoginRequest With {
                     .username = My.Settings.PWGatewayUsername,
                     .password = My.Settings.PWGatewayPassword,
-                    .force_sm_off = False
+                    .force_sm_off = True
                 }
                 Dim BodyPostData As String = JsonConvert.SerializeObject(LoginRequest).ToString
                 Dim BodyByteStream As Byte() = Encoding.ASCII.GetBytes(BodyPostData)
