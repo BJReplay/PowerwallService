@@ -276,4 +276,235 @@ Public Class PowerBIStreaming
         Public Property RemainingInsolation As Single
     End Class
 End Class
-
+Public Class WeatherUndergroundForecast
+    Public Class WUForecast
+        Public Property response As Response
+        Public Property hourly_forecast() As List(Of Hourly_Forecast)
+    End Class
+    Public Class Response
+        Public Property version As String
+        Public Property termsofService As String
+        Public Property features As Features
+    End Class
+    Public Class Features
+        Public Property hourly10day As Integer
+    End Class
+    Public Class Hourly_Forecast
+        Public Property FCTTIME As FCTTIME
+        Public Property temp As Temp
+        Public Property dewpoint As Dewpoint
+        Public Property condition As String
+        Public Property icon As String
+        Public Property icon_url As String
+        Public Property fctcode As String
+        Public Property sky As String
+        Public Property wspd As Wspd
+        Public Property wdir As Wdir
+        Public Property wx As String
+        Public Property uvi As String
+        Public Property humidity As String
+        Public Property windchill As Windchill
+        Public Property heatindex As Heatindex
+        Public Property feelslike As Feelslike
+        Public Property qpf As Qpf
+        Public Property snow As Snow
+        Public Property pop As String
+        Public Property mslp As Mslp
+    End Class
+    Public Class FCTTIME
+        Public Property hour As String
+        Public Property hour_padded As String
+        Public Property min As String
+        Public Property min_unpadded As String
+        Public Property sec As String
+        Public Property year As String
+        Public Property mon As String
+        Public Property mon_padded As String
+        Public Property mon_abbrev As String
+        Public Property mday As String
+        Public Property mday_padded As String
+        Public Property yday As String
+        Public Property isdst As String
+        Public Property epoch As String
+        Public Property pretty As String
+        Public Property civil As String
+        Public Property month_name As String
+        Public Property month_name_abbrev As String
+        Public Property weekday_name As String
+        Public Property weekday_name_night As String
+        Public Property weekday_name_abbrev As String
+        Public Property weekday_name_unlang As String
+        Public Property weekday_name_night_unlang As String
+        Public Property ampm As String
+        Public Property tz As String
+        Public Property age As String
+        Public Property UTCDATE As String
+    End Class
+    Public Class Temp
+        Public Property english As String
+        Public Property metric As String
+    End Class
+    Public Class Dewpoint
+        Public Property english As String
+        Public Property metric As String
+    End Class
+    Public Class Wspd
+        Public Property english As String
+        Public Property metric As String
+    End Class
+    Public Class Wdir
+        Public Property dir As String
+        Public Property degrees As String
+    End Class
+    Public Class Windchill
+        Public Property english As String
+        Public Property metric As String
+    End Class
+    Public Class Heatindex
+        Public Property english As String
+        Public Property metric As String
+    End Class
+    Public Class Feelslike
+        Public Property english As String
+        Public Property metric As String
+    End Class
+    Public Class Qpf
+        Public Property english As String
+        Public Property metric As String
+    End Class
+    Public Class Snow
+        Public Property english As String
+        Public Property metric As String
+    End Class
+    Public Class Mslp
+        Public Property english As String
+        Public Property metric As String
+    End Class
+End Class
+Public Class WillyWeatherForecast
+    Public Class WWForecast
+        Public Property location As Location
+        Public Property forecasts As Forecasts
+    End Class
+    Public Class Location
+        Public Property id As Integer
+        Public Property name As String
+        Public Property region As String
+        Public Property state As String
+        Public Property postcode As String
+        Public Property timeZone As String
+        Public Property lat As Single
+        Public Property lng As Single
+        Public Property typeId As Integer
+    End Class
+    Public Class Forecasts
+        Public Property temperature As Temperature
+    End Class
+    Public Class Temperature
+        Public Property days() As List(Of Day)
+        Public Property units As Units
+        Public Property issueDateTime As Date
+    End Class
+    Public Class Units
+        Public Property temperature As String
+    End Class
+    Public Class Day
+        Public Property dateTime As Date
+        Public Property entries() As List(Of Entry)
+    End Class
+    Public Class Entry
+        Public Property dateTime As Date
+        Public Property temperature As Decimal
+    End Class
+End Class
+Public Class TariffDefinition
+    Public Class Tariff
+        Public Property TariffItems() As List(Of TariffItem)
+        Public Property TariffPeriods() As List(Of TariffPeriod)
+    End Class
+    Public Class TariffItem
+        Public Property Name As String
+        Public Property ConsumptionRate As Decimal
+        Public Property FITRate As Decimal
+        Public Property IsDefault As Boolean = False
+        Public Property IsOffPeak As Boolean = False
+        Public ReadOnly Property OffsetPriority As Decimal
+            Get
+                Return ConsumptionRate / MaxCost
+            End Get
+        End Property
+        Public ReadOnly Property ChargePriority As Decimal
+            Get
+                Return ConsumptionRate / MinCost
+            End Get
+        End Property
+        Public ReadOnly Property FITPriority As Decimal
+            Get
+                Return FITRate / MaxFIT
+            End Get
+        End Property
+        Public ReadOnly Property StandbyPreferred As Boolean
+            Get
+                Return FITRate > ConsumptionRate
+            End Get
+        End Property
+        Public Property MinCost As Decimal = 9999
+        Public Property MaxCost As Decimal = 0
+        Public Property MinFit As Decimal = 9999
+        Public Property MaxFIT As Decimal = 0
+    End Class
+    Public Class TariffPeriod
+        Public Property Tariff As String
+        Public Property StartHour As Integer
+        Public Property EndHour As Integer
+        Public Property Sun As Boolean = False
+        Public Property Mon As Boolean = False
+        Public Property Tue As Boolean = False
+        Public Property Wed As Boolean = False
+        Public Property Thu As Boolean = False
+        Public Property Fri As Boolean = False
+        Public Property Sat As Boolean = False
+        Public Property LoadPercentage As Decimal = 0
+        Public Property Heating As Boolean = False
+        Public Property Cooling As Boolean = False
+    End Class
+End Class
+Public Class Maps
+    Public Class TariffPart
+        Public Property Tariff As String
+        Public Property Hour As Integer
+        Public Property DOW As DayOfWeek
+        Public Property LoadPercentage As Decimal
+        Public Property Heating As Boolean
+        Public Property Cooling As Boolean
+        Public Property ConsumptionRate As Decimal
+        Public Property FITRate As Decimal
+        Public Property OffsetPriority As Decimal
+        Public Property FITPriority As Decimal
+        Public Property StandbyPreferred As Boolean
+        Public Property IsOffPeak As Boolean
+    End Class
+    Public Class NextDayPart
+        Public Property PartDate As Date
+        Public Property PartHour As Integer
+        Public Property PartDOW As DayOfWeek
+        Public Property Tariff As String
+        Public Property LoadPercentage As Decimal
+        Public Property Heating As Boolean
+        Public Property Cooling As Boolean
+        Public Property Temperature As Decimal
+        Public Property HDD As Decimal
+        Public Property CDD As Decimal
+        Public Property ConsumptionRate As Decimal
+        Public Property FITRate As Decimal
+        Public Property OffsetPriority As Decimal
+        Public Property FITPriority As Decimal
+        Public Property StandbyPreferred As Boolean
+        Public Property IsOffPeak As Boolean
+    End Class
+    Public Class TemperaturePart
+        Public Property PartDate As Date
+        Public Property PartHour As Integer
+        Public Property Temperature As Decimal
+    End Class
+End Class

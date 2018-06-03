@@ -1,0 +1,32 @@
+{
+  "TariffItems": [
+    {
+      "Name": "Peak",
+      "ConsumptionRate": 18.8,
+      "FITRate": 11.3,
+      "IsDefault": false
+    },
+    {
+      "Name": "OffPeak",
+      "ConsumptionRate": 9.4,
+      "FITRate": 11.3,
+      "IsDefault": true,
+      "IsOffPeak": true
+    }
+  ],
+  "TariffPeriods": [
+    {
+      "Tariff": "Peak",
+      "StartHour": 7,
+      "EndHour": 23,
+      "Mon": true,
+      "Tue": true,
+      "Wed": true,
+      "Thu": true,
+      "Fri": true,
+      "LoadPercentage": 100.0,
+      "Heating": true,
+      "Cooling": true
+    }
+  ]
+}

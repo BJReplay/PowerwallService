@@ -15,7 +15,7 @@ Option Explicit On
 Namespace My
     
     <Global.System.Runtime.CompilerServices.CompilerGeneratedAttribute(),  _
-     Global.System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "15.5.0.0"),  _
+     Global.System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "15.7.0.0"),  _
      Global.System.ComponentModel.EditorBrowsableAttribute(Global.System.ComponentModel.EditorBrowsableState.Advanced)>  _
     Partial Friend NotInheritable Class MySettings
         Inherits Global.System.Configuration.ApplicationSettingsBase
@@ -292,9 +292,9 @@ Namespace My
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
          Global.System.Configuration.DefaultSettingValueAttribute("0.85")>  _
-        Public ReadOnly Property PWRoundTripEfficiency() As Single
+        Public ReadOnly Property PWRoundTripEfficiency() As Decimal
             Get
-                Return CType(Me("PWRoundTripEfficiency"),Single)
+                Return CType(Me("PWRoundTripEfficiency"),Decimal)
             End Get
         End Property
         
@@ -644,6 +644,133 @@ Namespace My
         Public ReadOnly Property PVSystem2Tilt() As Integer
             Get
                 Return CType(Me("PVSystem2Tilt"),Integer)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("zmw:00000.19.95864")>  _
+        Public ReadOnly Property WULocation() As String
+            Get
+                Return CType(Me("WULocation"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
+        Public ReadOnly Property WUAPIKey() As String
+            Get
+                Return CType(Me("WUAPIKey"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("http://api.wunderground.com/api/{0}/hourly10day/q/{1}.json")>  _
+        Public ReadOnly Property WUAddress() As String
+            Get
+                Return CType(Me("WUAddress"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+        Public ReadOnly Property WUGetWeather() As Boolean
+            Get
+                Return CType(Me("WUGetWeather"),Boolean)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("14152")>  _
+        Public ReadOnly Property WWLocation() As String
+            Get
+                Return CType(Me("WWLocation"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
+        Public ReadOnly Property WWAPIKey() As String
+            Get
+                Return CType(Me("WWAPIKey"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("https://api.willyweather.com.au/v2/{0}/locations/{1}/weather.json?forecasts=tempe"& _ 
+            "rature&days=2")>  _
+        Public ReadOnly Property WWAddress() As String
+            Get
+                Return CType(Me("WWAddress"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
+        Public ReadOnly Property WWGetWeather() As Boolean
+            Get
+                Return CType(Me("WWGetWeather"),Boolean)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("25.0")>  _
+        Public ReadOnly Property CDDBase() As Decimal
+            Get
+                Return CType(Me("CDDBase"),Decimal)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("3.77476144")>  _
+        Public ReadOnly Property CDDFactor() As Decimal
+            Get
+                Return CType(Me("CDDFactor"),Decimal)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("15.0")>  _
+        Public ReadOnly Property HDDBase() As Decimal
+            Get
+                Return CType(Me("HDDBase"),Decimal)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("0.9456908")>  _
+        Public ReadOnly Property HDDFactor() As Decimal
+            Get
+                Return CType(Me("HDDFactor"),Decimal)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("17.28104")>  _
+        Public ReadOnly Property DaysFactor() As Decimal
+            Get
+                Return CType(Me("DaysFactor"),Decimal)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("tariffs.json")>  _
+        Public ReadOnly Property TariffConfigFile() As String
+            Get
+                Return CType(Me("TariffConfigFile"),String)
             End Get
         End Property
     End Class

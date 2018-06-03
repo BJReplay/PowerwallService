@@ -8,6 +8,10 @@ Imports PowerwallService.SolCast
 Imports PowerwallService.PVOutput
 Imports PowerwallService.SunriseSunset
 Imports PowerwallService.PowerBIStreaming
+Imports PowerwallService.WeatherUndergroundForecast
+Imports PowerwallService.WillyWeatherForecast
+Imports PowerwallService.TariffDefinition
+Imports PowerwallService.Maps
 #End Region
 Public Class PowerwallService
 #Region "Variables"
@@ -21,10 +25,11 @@ Public Class PowerwallService
     Private CompactTALocal As New PWHistoryDataSetTableAdapters.CompactObsTALocal
     Private Get5MinuteAveragesTA As New PWHistoryDataSetTableAdapters.spGet5MinuteAveragesTableAdapter
     Private SPs As New PWHistoryDataSetTableAdapters.SPs
-    Private ObservationTimer As New System.Timers.Timer
-    Private OneMinuteTime As New System.Timers.Timer
-    Private ReportingTimer As New System.Timers.Timer
-    Private ForecastTimer As New System.Timers.Timer
+    Private ObservationTimer As New Timers.Timer
+    Private OneMinuteTimer As New Timers.Timer
+    Private ReportingTimer As New Timers.Timer
+    Private ForecastTimer As New Timers.Timer
+    Private FiveBeforeTheHourTimer As New Timers.Timer
     Private PWToken As String = String.Empty
     Shared NextDayForecastGeneration As Single = 0
     Shared NextDayMorningGeneration As Single = 0
@@ -60,19 +65,25 @@ Public Class PowerwallService
     Shared DBLock As New Object
     Shared PWLock As New Object
     Shared SkipObservation As Boolean = False
+    Shared TariffDefinition As Tariff
+    Shared TariffMap As List(Of TariffPart)
+    Shared NearTermPeriods As List(Of NextDayPart)
+    Shared TempFCasts As List(Of TemperaturePart)
+    Shared CurrentTariff As NextDayPart
+    Shared NextTariff As NextDayPart
 #End Region
 #Region "Timer Handlers"
-    Protected Async Sub OnObservationTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
+    Protected Async Sub OnObservationTimer(Sender As Object, Args As Timers.ElapsedEventArgs)
         Await Task.Run(Sub()
                            GetObservationAndStore()
                        End Sub)
     End Sub
-    Protected Async Sub OnOneMinuteTime(Sender As Object, Args As System.Timers.ElapsedEventArgs)
+    Protected Async Sub OnOneMinuteTime(Sender As Object, Args As Timers.ElapsedEventArgs)
         Await Task.Run(Sub()
                            DoPerMinuteTasks()
                        End Sub)
     End Sub
-    Protected Async Sub OnReportingTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
+    Protected Async Sub OnReportingTimer(Sender As Object, Args As Timers.ElapsedEventArgs)
         Await Task.Run(Sub()
                            If My.Settings.PVReportingEnabled Then
                                If My.Settings.PVSendPowerwall Then
@@ -90,14 +101,20 @@ Public Class PowerwallService
                            End If
                        End Sub)
     End Sub
-    Protected Async Sub OnForecastTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
+    Protected Async Sub OnForecastTimer(Sender As Object, Args As Timers.ElapsedEventArgs)
         Await Task.Run(Sub()
                            CheckSOCLevel()
                        End Sub)
     End Sub
+    Protected Async Sub OnFiveBeforeTheHourTimer(Sender As Object, Args As Timers.ElapsedEventArgs)
+        Await Task.Run(Sub()
+                           DoHourlyTasks(Now)
+                       End Sub)
+    End Sub
     Protected Async Sub DebugTask()
         Await Task.Run(Sub()
-                           If My.Settings.PWControlEnabled Then CheckSOCLevel()
+                           LoadTariffConfig()
+                           DoHourlyTasks(Now)
                        End Sub)
     End Sub
 #End Region
@@ -115,9 +132,9 @@ Public Class PowerwallService
         ObservationTimer.AutoReset = True
         AddHandler ObservationTimer.Elapsed, AddressOf OnObservationTimer
 
-        OneMinuteTime.Interval = 60 * 1000 ' Every Minute
-        OneMinuteTime.AutoReset = True
-        AddHandler OneMinuteTime.Elapsed, AddressOf OnOneMinuteTime
+        OneMinuteTimer.Interval = 60 * 1000 ' Every Minute
+        OneMinuteTimer.AutoReset = True
+        AddHandler OneMinuteTimer.Elapsed, AddressOf OnOneMinuteTime
 
         If My.Settings.PVReportingEnabled Then
             ReportingTimer.Interval = 5 * 60 * 1000 ' Every Five Minutes
@@ -130,6 +147,10 @@ Public Class PowerwallService
             ForecastTimer.AutoReset = True
             AddHandler ForecastTimer.Elapsed, AddressOf OnForecastTimer
         End If
+
+        FiveBeforeTheHourTimer.Interval = 60 * 60 * 1000 ' Every Hour
+        FiveBeforeTheHourTimer.AutoReset = True
+        AddHandler FiveBeforeTheHourTimer.Elapsed, AddressOf OnFiveBeforeTheHourTimer
 
         Task.Run(Sub()
                      DoAsyncStartupProcesses()
@@ -161,7 +182,12 @@ Public Class PowerwallService
                 End SyncLock
             End Try
         End If
+        LoadTariffConfig()
+        BuildTariffMap()
+        If My.Settings.WWGetWeather Then GetWWTemperature()
+        If My.Settings.WUGetWeather Then GetWUTemperature()
         SetOffPeakHours(Now)
+        'SetTariffHours(Now)
         GetForecasts()
         GetPWMode()
         Task.Run(Sub()
@@ -172,7 +198,7 @@ Public Class PowerwallService
 
         Task.Run(Sub()
                      SleepUntilSecBoundary(60)
-                     OneMinuteTime.Start()
+                     OneMinuteTimer.Start()
                      DoPerMinuteTasks()
                      EventLog.WriteEntry("One Minute Timer Started", EventLogEntryType.Information, 109)
                  End Sub)
@@ -180,7 +206,7 @@ Public Class PowerwallService
     Protected Overrides Sub OnContinue()
         EventLog.WriteEntry("Powerwall Service Resuming", EventLogEntryType.Information, 102)
         ObservationTimer.Start()
-        OneMinuteTime.Start()
+        OneMinuteTimer.Start()
         Task.Run(Sub()
                      DebugTask()
                  End Sub
@@ -190,7 +216,7 @@ Public Class PowerwallService
     Protected Overrides Sub OnPause()
         EventLog.WriteEntry("Powerwall Service Pausing", EventLogEntryType.Information, 104)
         ObservationTimer.Stop()
-        OneMinuteTime.Stop()
+        OneMinuteTimer.Stop()
         If My.Settings.PVReportingEnabled Then ReportingTimer.Stop()
         If My.Settings.PWControlEnabled Then ForecastTimer.Stop()
         EventLog.WriteEntry("Powerwall Service Paused", EventLogEntryType.Information, 105)
@@ -199,8 +225,8 @@ Public Class PowerwallService
         EventLog.WriteEntry("Powerwall Service Stoping", EventLogEntryType.Information, 106)
         ObservationTimer.Stop()
         ObservationTimer.Dispose()
-        OneMinuteTime.Stop()
-        OneMinuteTime.Dispose()
+        OneMinuteTimer.Stop()
+        OneMinuteTimer.Dispose()
         If My.Settings.PVReportingEnabled Then
             ReportingTimer.Stop()
             ReportingTimer.Dispose()
@@ -293,6 +319,114 @@ Public Class PowerwallService
         End If
         If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Start: {0:yyyy-MM-dd HH:mm} End: {1:yyyy-MM-dd HH:mm}", OffPeakStart, PeakStart), EventLogEntryType.Information, 713)
     End Sub
+    Public Sub SetTariffHours(InvokedTime As DateTime)
+        Dim TodayDOW As DayOfWeek = InvokedTime.DayOfWeek
+        Dim Tomorrow As Date = DateAdd(DateInterval.Day, 1, InvokedTime)
+        Dim TomorrowDOW As DayOfWeek = Tomorrow.DayOfWeek
+        Dim TZI As TimeZoneInfo = TimeZoneInfo.Local
+        Dim DSTOffset As Integer = 0
+        If My.Settings.TariffIgnoresDST And TZI.IsDaylightSavingTime(InvokedTime) Then
+            DSTOffset = 1
+        End If
+
+        CurrentDOW = InvokedTime.DayOfWeek
+
+        NearTermPeriods = New List(Of NextDayPart)
+
+        ' Get the data for the remainder of today
+        Dim TMEs = From TMs In TariffMap
+                   Join TFs In TempFCasts
+                       On TFs.PartHour Equals TMs.Hour
+                   Where TMs.DOW = CurrentDOW And
+                       TFs.PartDate = InvokedTime.Date And
+                       TMs.Hour >= InvokedTime.Hour - 1
+                   Order By TMs.Hour
+                   Select TFs.PartDate, TMs.DOW, TMs.Hour, TMs.Cooling, TMs.Heating, TMs.ConsumptionRate, TMs.LoadPercentage, TMs.FITPriority, TMs.FITRate, TMs.OffsetPriority, TMs.StandbyPreferred, TMs.Tariff, TFs.Temperature, TMs.IsOffPeak
+        For Each TME In TMEs
+            NearTermPeriods.Add(New NextDayPart With {.PartDate = TME.PartDate, .PartHour = TME.Hour + DSTOffset, .PartDOW = TME.DOW, .Cooling = TME.Cooling, .Heating = TME.Heating, .ConsumptionRate = TME.ConsumptionRate, .LoadPercentage = TME.LoadPercentage, .FITPriority = TME.FITPriority, .FITRate = TME.FITRate, .OffsetPriority = TME.OffsetPriority, .StandbyPreferred = TME.StandbyPreferred, .Tariff = TME.Tariff, .Temperature = TME.Temperature, .CDD = CDec(IIf(TME.Temperature < My.Settings.CDDBase, (My.Settings.CDDBase - TME.Temperature) / 24.0, 0)), .HDD = CDec(IIf(TME.Temperature > My.Settings.HDDBase, (TME.Temperature - My.Settings.HDDBase) / 24.0, 0)), .IsOffPeak = TME.IsOffPeak})
+        Next
+
+        ' Get the data for tomorrow
+        TMEs = From TMs In TariffMap
+               Join TFs In TempFCasts
+                       On TFs.PartHour Equals TMs.Hour
+               Where TMs.DOW = TomorrowDOW And
+                     TFs.PartDate = Tomorrow.Date
+               Order By TMs.Hour
+               Select TFs.PartDate, TMs.DOW, TMs.Hour, TMs.Cooling, TMs.Heating, TMs.ConsumptionRate, TMs.LoadPercentage, TMs.FITPriority, TMs.FITRate, TMs.OffsetPriority, TMs.StandbyPreferred, TMs.Tariff, TFs.Temperature, TMs.IsOffPeak
+        For Each TME In TMEs
+            NearTermPeriods.Add(New NextDayPart With {.PartDate = TME.PartDate, .PartHour = TME.Hour + DSTOffset, .PartDOW = TME.DOW, .Cooling = TME.Cooling, .Heating = TME.Heating, .ConsumptionRate = TME.ConsumptionRate, .LoadPercentage = TME.LoadPercentage, .FITPriority = TME.FITPriority, .FITRate = TME.FITRate, .OffsetPriority = TME.OffsetPriority, .StandbyPreferred = TME.StandbyPreferred, .Tariff = TME.Tariff, .Temperature = TME.Temperature, .CDD = CDec(IIf(TME.Temperature < My.Settings.CDDBase, (My.Settings.CDDBase - TME.Temperature) / 24.0, 0)), .HDD = CDec(IIf(TME.Temperature > My.Settings.HDDBase, (TME.Temperature - My.Settings.HDDBase) / 24.0, 0)), .IsOffPeak = TME.IsOffPeak})
+        Next
+
+        ' Adjust any hours that were pushed forward to 24 due to DST to the beginning of the next day
+        Dim AdjustPeriods = From NTPs In NearTermPeriods
+                            Where NTPs.PartHour = 24
+        For Each AdjustPeriod In AdjustPeriods
+            AdjustPeriod.PartHour = 0
+            AdjustPeriod.PartDate = DateAdd(DateInterval.Day, 1, AdjustPeriod.PartDate)
+        Next
+
+        ' Check if current day is all off peak
+        Dim AOP = From NTPs In NearTermPeriods
+                  Where NTPs.PartDate = InvokedTime.Date And
+                        NTPs.IsOffPeak = False
+        CurrentDayAllOffPeak = AOP.Count = 0
+
+        ' Check if next day is all off peak
+        AOP = From NTPs In NearTermPeriods
+              Where NTPs.PartDate = Tomorrow.Date And
+                    NTPs.IsOffPeak = False
+        NextDayAllDayOffPeak = AOP.Count = 0
+
+        ' Get Current Tariff
+        Dim CT = From NTPs In NearTermPeriods
+                 Where NTPs.PartDate = InvokedTime.Date And
+                       NTPs.PartHour = InvokedTime.Hour
+                 Order By NTPs.PartDate, NTPs.PartHour
+                 Take 1
+        CurrentTariff = CT(0)
+
+        ' Get Next Tariff
+        Dim NT = From NTPs In NearTermPeriods
+                 Where NTPs.Tariff <> CurrentTariff.Tariff
+                 Order By NTPs.PartDate, NTPs.PartHour
+                 Take 1
+        NextTariff = NT(0)
+
+        If CurrentTariff.IsOffPeak = True Then
+            ' Off Peak started on or before current interval.
+            OffPeakStart = DateAdd(DateInterval.Hour, CurrentTariff.PartHour, CurrentTariff.PartDate)
+            If NextTariff.IsOffPeak = True Then
+                ' Next Tariff is also off peak = assume Peak is next day
+                PeakStart = DateAdd(DateInterval.Day, 1, NextTariff.PartDate)
+            Else
+                ' Set start of Peak Period
+                PeakStart = DateAdd(DateInterval.Hour, NextTariff.PartHour, NextTariff.PartDate)
+            End If
+        Else
+            ' Peak started on or before current interval.
+            PeakStart = DateAdd(DateInterval.Hour, CurrentTariff.PartHour, CurrentTariff.PartDate)
+            If NextTariff.IsOffPeak = True Then
+                ' Next Tariff is off peak 
+                OffPeakStart = DateAdd(DateInterval.Hour, NextTariff.PartHour, NextTariff.PartDate)
+            Else
+                ' next tariff is not off peak, assume off peak is next day
+                OffPeakStart = DateAdd(DateInterval.Day, 1, NextTariff.PartDate)
+            End If
+
+        End If
+
+        If Sunrise.Date <> InvokedTime.Date Then
+            Dim SunriseSunsetData As Result = GetSunriseSunset(Of Result)(InvokedTime)
+            With SunriseSunsetData.results
+                CivilTwilightSunrise = .civil_twilight_begin.ToLocalTime
+                CivilTwilightSunset = .civil_twilight_end.ToLocalTime
+                Sunrise = .sunrise.ToLocalTime
+                Sunset = .sunset.ToLocalTime
+            End With
+        End If
+
+    End Sub
     Sub DoPerMinuteTasks()
         Dim Minute As Integer = Now.Minute
         If Minute Mod 10 = 6 Or Minute Mod 10 = 1 Then
@@ -304,16 +438,30 @@ Public Class PowerwallService
                 End If
             End If
         End If
-        If Minute Mod 10 = 1 Then
-            If My.Settings.PWControlEnabled Then
-                If ForecastTimer.Enabled = False Then
-                    ForecastTimer.Start()
-                    EventLog.WriteEntry("Solar Forecast and Charge Monitoring Timer Started", EventLogEntryType.Information, 111)
-                    CheckSOCLevel()
-                End If
+        If Minute Mod 5 = 0 And Minute Mod 10 <> 0 Then
+            If ForecastTimer.Enabled = False Then
+                ForecastTimer.Start()
+                EventLog.WriteEntry("Solar Forecast and Charge Monitoring Timer Started", EventLogEntryType.Information, 111)
+                CheckSOCLevel()
+            End If
+        End If
+        If Minute Mod 55 = 0 Then
+            If FiveBeforeTheHourTimer.Enabled = False Then
+                FiveBeforeTheHourTimer.Start()
+                EventLog.WriteEntry("Hourly Timer Started", EventLogEntryType.Information, 112)
+                DoHourlyTasks(Now)
             End If
         End If
         AggregateToMinute()
+    End Sub
+    Sub DoHourlyTasks(InvokedTime As DateTime)
+        If InvokedTime.Hour = 23 Then
+            If My.Settings.WWGetWeather Then GetWWTemperature()
+            If My.Settings.WUGetWeather Then GetWUTemperature()
+        End If
+        'BuildTariffMap()
+        SetOffPeakHours(Now)
+        'SetTariffHours(Now)
     End Sub
     Function GetUnsecuredJSONResult(Of JSONType)(URL As String) As JSONType
         Dim response As HttpWebResponse
@@ -359,7 +507,19 @@ Public Class PowerwallService
     End Function
     Function CheckSunIsUp(AsAt As Date) As Boolean
         If AsAt.Date = Now.Date Then
-            If AsAt > CivilTwilightSunrise And AsAt < CivilTwilightSunset Then Return True
+            If AsAt.Date = CivilTwilightSunrise.Date Then
+                If AsAt > CivilTwilightSunrise And AsAt < CivilTwilightSunset Then Return True
+                If CivilTwilightSunrise.Date <> AsAt.Date Then
+                    Dim SunriseSunsetData As Result = GetSunriseSunset(Of Result)(AsAt)
+                    With SunriseSunsetData.results
+                        CivilTwilightSunrise = .civil_twilight_begin.ToLocalTime
+                        CivilTwilightSunset = .civil_twilight_end.ToLocalTime
+                        Sunrise = .sunrise.ToLocalTime
+                        Sunset = .sunset.ToLocalTime
+                    End With
+                End If
+                If AsAt > CivilTwilightSunrise And AsAt < CivilTwilightSunset Then Return True
+            End If
         Else
             If AsAtSunrise Is Nothing Then
                 AsAtSunrise = GetSunriseSunset(Of Result)(AsAt)
@@ -372,7 +532,126 @@ Public Class PowerwallService
         Return False
     End Function
 #End Region
-#Region "Forecasts and Targets"
+#Region "Insolation Forecasts and Charge Targets"
+    Sub OperateBasedOnTariff()
+        Dim InvokedTime As DateTime = Now
+        SetTariffHours(InvokedTime)
+        If Not FirstReadingsAvailable Then
+            GetObservationAndStore()
+        End If
+        GetForecasts()
+        Dim RawTargetSOC As Integer
+        Dim ShortfallInsolation As Single = 0
+        Dim NoStandbyTargetSOC As Single = 0
+        Dim StandbyTargetSOC As Single = 0
+        Dim RemainingOvernightRatio As Single
+        Dim RemainingInsolationToday As Single
+        Dim ForecastInsolationTomorrow As Single
+        Dim PWPeakConsumption As Integer = CInt(IIf(CurrentDOW = DayOfWeek.Saturday Or CurrentDOW = DayOfWeek.Sunday, My.Settings.PWPeakConsumptionWeekend, My.Settings.PWPeakConsumption))
+        Dim RemainingOffPeak As Single
+        Dim Intent As String = "Thinking"
+        Dim NewTarget As Single = 0
+        If InvokedTime > Sunrise And InvokedTime < Sunset Then
+            RemainingOvernightRatio = 1
+            RemainingInsolationToday = CurrentDayForecast.PVEstimate
+            ForecastInsolationTomorrow = NextDayForecastGeneration
+            ShortfallInsolation = 0
+            Intent = "Sun is Up"
+        ElseIf InvokedTime > PeakStart And InvokedTime < Sunrise Then
+            RemainingOvernightRatio = 0
+            RemainingInsolationToday = CurrentDayForecast.PVEstimate
+            ForecastInsolationTomorrow = NextDayForecastGeneration
+            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
+            Intent = "Waiting for Sunrise"
+        ElseIf InvokedTime > Sunset And InvokedTime < OffPeakStart Then
+            RemainingOvernightRatio = 1
+            RemainingInsolationToday = 0
+            ForecastInsolationTomorrow = NextDayForecastGeneration
+            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
+            Intent = "Waiting for Off Peak"
+        ElseIf InvokedTime > OffPeakStart And InvokedTime < PeakStart Then
+            RemainingOvernightRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, PeakStart) + 1) / OffPeakHours)
+            If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
+            If RemainingOvernightRatio > 1 Then RemainingOvernightRatio = 1
+            RemainingInsolationToday = NextDayForecastGeneration
+            ForecastInsolationTomorrow = 0
+            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
+            Intent = "Monitoring"
+        End If
+        RemainingOffPeak = My.Settings.PWOvernightLoad * RemainingOvernightRatio
+        RawTargetSOC = My.Settings.PWMorningBuffer + CInt(RemainingOffPeak)
+        If ShortfallInsolation < 0 Then ShortfallInsolation = 0
+        NoStandbyTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
+        If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
+        StandbyTargetSOC = My.Settings.PWMorningBuffer + (ShortfallInsolation / My.Settings.PWCapacity * 100)
+        If StandbyTargetSOC > 100 Then StandbyTargetSOC = 100
+        NewTarget = CSng(IIf(My.Settings.PWOvernightStandby, StandbyTargetSOC, NoStandbyTargetSOC))
+        If InvokedTime > Sunset And InvokedTime < OffPeakStart Then
+            If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Then Intent = "Planning to Charge" Else Intent = "No Charging Required"
+        End If
+        If My.Settings.PWControlEnabled Then
+            Try
+                If InvokedTime > DateAdd(DateInterval.Minute, -10, PeakStart) And Not CurrentDayAllOffPeak And (PreCharging Or AboveMinBackup Or OnStandby) Then
+                    OperationLockout = PeakStart
+                    EventLog.WriteEntry(String.Format("Reaching end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, StandbyTargetSOC), EventLogEntryType.Information, 504)
+                    DoExitCharging(Intent)
+                ElseIf (InvokedTime >= OffPeakStart And InvokedTime < PeakStart And InvokedTime > OperationLockout) Then
+                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Off Peak Period: Current SOC={0}, Minimum required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 500)
+                    If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Off Peak Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OffPeakStart, PeakStart), EventLogEntryType.Information, 714)
+                    If NextDayAllDayOffPeak And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                        If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                            OnStandby = True
+                            PreCharging = False
+                        End If
+                    ElseIf My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                        If SetPWMode("Current SOC above required morning SOC, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                            OnStandby = True
+                            PreCharging = False
+                        End If
+                    ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And CurrentDayAllOffPeak And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                        If SetPWMode("Current SOC above weekend target, standby on target enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                            OnStandby = True
+                            PreCharging = False
+                        End If
+                    ElseIf (SOC.percentage < StandbyTargetSOC And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (SOC.percentage < NoStandbyTargetSOC And Not OnStandby And Not PreCharging) Then
+                        If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 501)
+                        If SetPWMode("Current SOC below required morning SOC", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
+                            PreCharging = True
+                            OnStandby = False
+                        End If
+                    ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby And My.Settings.PWOvernightStandby Then
+                        EventLog.WriteEntry(String.Format("Current SOC above required setting and Standby Mode Enabled: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 505)
+                        If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                            OnStandby = True
+                            PreCharging = False
+                        End If
+                    ElseIf (LastTarget < NewTarget And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (LastTarget < NewTarget And PreCharging) Then
+                        If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
+                        If SetPWMode("Current SOC below required morning SOC", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
+                            PreCharging = True
+                            OnStandby = False
+                        End If
+                    ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby Then
+                        EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
+                        DoExitCharging(Intent)
+                    End If
+                Else
+                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage), EventLogEntryType.Information, 503)
+                End If
+            Catch Ex As Exception
+                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 510)
+            End Try
+        End If
+        If My.Settings.PBIChargeIntentEndpoint <> String.Empty Then
+            Try
+                Dim PBIRows As New PBIChargeLogging With {.Rows = New List(Of ChargePlan)}
+                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = My.Settings.PWMorningBuffer, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .RemainingOffPeak = RemainingOffPeak * My.Settings.PWCapacity / 100, .Shortfall = ShortfallInsolation})
+                Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBIChargeIntentEndpoint, PBIRows)
+            Catch ex As Exception
+
+            End Try
+        End If
+    End Sub
     Sub CheckSOCLevel()
         Dim InvokedTime As DateTime = Now
         SetOffPeakHours(InvokedTime)
@@ -429,57 +708,59 @@ Public Class PowerwallService
         If InvokedTime > Sunset And InvokedTime < OffPeakStart Then
             If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Then Intent = "Planning to Charge" Else Intent = "No Charging Required"
         End If
-        Try
-            If InvokedTime > DateAdd(DateInterval.Minute, -20, PeakStart) And Not CurrentDayAllOffPeak And (PreCharging Or AboveMinBackup Or OnStandby) Then
-                OperationLockout = PeakStart
-                EventLog.WriteEntry(String.Format("Reaching end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, StandbyTargetSOC), EventLogEntryType.Information, 504)
-                DoExitCharging(Intent)
-            ElseIf (InvokedTime >= OffPeakStart And InvokedTime < PeakStart And InvokedTime > OperationLockout) Then
-                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Minimum required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 500)
-                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OffPeakStart, PeakStart), EventLogEntryType.Information, 714)
-                If NextDayAllDayOffPeak And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                    If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
-                        OnStandby = True
-                        PreCharging = False
-                    End If
-                ElseIf My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                    If SetPWMode("Current SOC above required morning SOC, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
-                        OnStandby = True
-                        PreCharging = False
-                    End If
-                ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And CurrentDayAllOffPeak And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                    If SetPWMode("Current SOC above weekend target, standby on target enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
-                        OnStandby = True
-                        PreCharging = False
-                    End If
-                ElseIf (SOC.percentage < StandbyTargetSOC And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (SOC.percentage < NoStandbyTargetSOC And Not OnStandby And Not PreCharging) Then
-                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 501)
-                    If SetPWMode("Current SOC below required morning SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
-                        PreCharging = True
-                        OnStandby = False
-                    End If
-                ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby And My.Settings.PWOvernightStandby Then
-                    EventLog.WriteEntry(String.Format("Current SOC above required setting and Standby Mode Enabled: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 505)
-                    If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
-                        OnStandby = True
-                        PreCharging = False
-                    End If
-                ElseIf (LastTarget < NewTarget And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (LastTarget < NewTarget And PreCharging) Then
-                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
-                    If SetPWMode("Current SOC below required morning SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
-                        PreCharging = True
-                        OnStandby = False
-                    End If
-                ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby Then
-                    EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
+        If My.Settings.PWControlEnabled Then
+            Try
+                If InvokedTime > DateAdd(DateInterval.Minute, -10, PeakStart) And Not CurrentDayAllOffPeak And (PreCharging Or AboveMinBackup Or OnStandby) Then
+                    OperationLockout = PeakStart
+                    EventLog.WriteEntry(String.Format("Reaching end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, StandbyTargetSOC), EventLogEntryType.Information, 504)
                     DoExitCharging(Intent)
+                ElseIf (InvokedTime >= OffPeakStart And InvokedTime < PeakStart And InvokedTime > OperationLockout) Then
+                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Minimum required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 500)
+                    If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OffPeakStart, PeakStart), EventLogEntryType.Information, 714)
+                    If NextDayAllDayOffPeak And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                        If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                            OnStandby = True
+                            PreCharging = False
+                        End If
+                    ElseIf My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                        If SetPWMode("Current SOC above required morning SOC, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                            OnStandby = True
+                            PreCharging = False
+                        End If
+                    ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And CurrentDayAllOffPeak And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                        If SetPWMode("Current SOC above weekend target, standby on target enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                            OnStandby = True
+                            PreCharging = False
+                        End If
+                    ElseIf (SOC.percentage < StandbyTargetSOC And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (SOC.percentage < NoStandbyTargetSOC And Not OnStandby And Not PreCharging) Then
+                        If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 501)
+                        If SetPWMode("Current SOC below required morning SOC", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
+                            PreCharging = True
+                            OnStandby = False
+                        End If
+                    ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby And My.Settings.PWOvernightStandby Then
+                        EventLog.WriteEntry(String.Format("Current SOC above required setting and Standby Mode Enabled: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 505)
+                        If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                            OnStandby = True
+                            PreCharging = False
+                        End If
+                    ElseIf (LastTarget < NewTarget And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (LastTarget < NewTarget And PreCharging) Then
+                        If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
+                        If SetPWMode("Current SOC below required morning SOC", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
+                            PreCharging = True
+                            OnStandby = False
+                        End If
+                    ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby Then
+                        EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
+                        DoExitCharging(Intent)
+                    End If
+                Else
+                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage), EventLogEntryType.Information, 503)
                 End If
-            Else
-                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage), EventLogEntryType.Information, 503)
-            End If
-        Catch Ex As Exception
-            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 510)
-        End Try
+            Catch Ex As Exception
+                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 510)
+            End Try
+        End If
         If My.Settings.PBIChargeIntentEndpoint <> String.Empty Then
             Try
                 Dim PBIRows As New PBIChargeLogging With {.Rows = New List(Of ChargePlan)}
@@ -724,10 +1005,10 @@ Public Class PowerwallService
     End Function
 #End Region
 #Region "Powerwall Control"
-    Private Function SetPWMode(ActionMessage As String, ActionMode As String, ActionType As String, Target As Double, Mode As String, ByRef Intent As String) As Integer
+    Private Function SetPWMode(ActionMessage As String, ActionType As String, Target As Double, Mode As String, ByRef Intent As String) As Integer
         Dim RunningResult As Integer
         SkipObservation = True
-        If Target > My.Settings.PWMinBackupPercentage Then
+        If Target > My.Settings.PWMinBackupPercentage And ActionType <> "Standby" Then
             Target = Math.Round(Target) + 2
         End If
         If Target > 100 Then Target = 100
@@ -744,12 +1025,12 @@ Public Class PowerwallService
                 RunningResult = GetPWRunning()
             End SyncLock
             If APIResult = 202 Then
-                EventLog.WriteEntry(String.Format("{5}ed {6} Mode: Current SOC={0}, Current Target={1}, Set Mode={2}, Set Backup Percentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Information, 512)
+                EventLog.WriteEntry(String.Format("Entered {5} Mode: Current SOC={0}, Current Target={1}, Set Mode={2}, Set Backup Percentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionType), EventLogEntryType.Information, 512)
                 AboveMinBackup = (NewChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
                 Intent = ActionType
             Else
-                EventLog.WriteEntry(String.Format("Failed to {5} {6} Mode: Current SOC={0}, Attempted Target={1}, Mode={2}, BackupPercentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Warning, 513)
-                Intent = String.Format("Trying to {0} {1}", ActionMode, ActionType)
+                EventLog.WriteEntry(String.Format("Failed to Enter {5} Mode: Current SOC={0}, Attempted Target={1}, Mode={2}, BackupPercentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionType), EventLogEntryType.Warning, 513)
+                Intent = String.Format("Trying to Enter {0}", ActionType)
             End If
             SetPWMode = APIResult
         Catch ex As Exception
@@ -764,28 +1045,30 @@ Public Class PowerwallService
         GetPWRunning = GetUnsecured(My.Settings.PWGatewayAddress & "/api/sitemaster/run")
     End Function
     Private Sub GetPWMode()
-        Dim RunningResult As Integer
-        Try
-            If Not PreCharging Then
-                Dim APIResult As Integer
-                Dim CurrentChargeSettings As Operation
+        If My.Settings.PWControlEnabled Then
+            Dim RunningResult As Integer
+            Try
+                If Not PreCharging Then
+                    Dim APIResult As Integer
+                    Dim CurrentChargeSettings As Operation
+                    SyncLock PWLock
+                        CurrentChargeSettings = GetPWSecureAPIResult(Of Operation)("operation", ForceReLogin:=True)
+                        APIResult = GetPWSecureConfigCompleted("config/completed")
+                        RunningResult = GetPWRunning()
+                    End SyncLock
+                    If APIResult = 202 Then
+                        EventLog.WriteEntry(String.Format("Current PW Mode={0}, BackupPercentage={1}, APIResult = {2}", CurrentChargeSettings.mode, CurrentChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Information, 602)
+                        AboveMinBackup = (CurrentChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
+                    Else
+                        EventLog.WriteEntry("Failed to obtain current operation mode", EventLogEntryType.Warning, 513)
+                    End If
+                End If
+            Catch ex As Exception
                 SyncLock PWLock
-                    CurrentChargeSettings = GetPWSecureAPIResult(Of Operation)("operation", ForceReLogin:=True)
-                    APIResult = GetPWSecureConfigCompleted("config/completed")
                     RunningResult = GetPWRunning()
                 End SyncLock
-                If APIResult = 202 Then
-                    EventLog.WriteEntry(String.Format("Current PW Mode={0}, BackupPercentage={1}, APIResult = {2}", CurrentChargeSettings.mode, CurrentChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Information, 602)
-                    AboveMinBackup = (CurrentChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
-                Else
-                    EventLog.WriteEntry("Failed to obtain current operation mode", EventLogEntryType.Warning, 513)
-                End If
-            End If
-        Catch ex As Exception
-            SyncLock PWLock
-                RunningResult = GetPWRunning()
-            End SyncLock
-        End Try
+            End Try
+        End If
     End Sub
     Function GetPWSecureAPIResult(Of JSONType)(API As String, Optional ForceReLogin As Boolean = False) As JSONType
         Try
@@ -876,7 +1159,7 @@ Public Class PowerwallService
         Return PWToken
     End Function
     Private Sub DoExitCharging(ByRef Intent As String)
-        If SetPWMode("Exit Charge or Standby Mode", "Enter", "Self Consumption", My.Settings.PWMinBackupPercentage, "self_consumption", Intent) = 202 Then
+        If SetPWMode("Exit Charge or Standby Mode", "Self Consumption", My.Settings.PWMinBackupPercentage, "self_consumption", Intent) = 202 Then
             PreCharging = False
             OnStandby = False
             AboveMinBackup = False
@@ -1046,5 +1329,84 @@ Public Class PowerwallService
             Return 0
         End Try
     End Function
+#End Region
+#Region "Temperature Forecasts"
+    Function GetWUTemperatureForecast(Of JSONType)() As JSONType
+        Return GetUnsecuredJSONResult(Of JSONType)(String.Format(My.Settings.WUAddress, My.Settings.WUAPIKey, My.Settings.WULocation))
+    End Function
+    Function GetWWTemperatureForecast(Of JSONType)() As JSONType
+        Return GetUnsecuredJSONResult(Of JSONType)(String.Format(My.Settings.WWAddress, My.Settings.WWAPIKey, My.Settings.WWLocation))
+    End Function
+    Sub GetWUTemperature()
+        TempFCasts = New List(Of TemperaturePart)
+        Dim WUForecast As WUForecast = GetWUTemperatureForecast(Of WUForecast)()
+        For Each HF As Hourly_Forecast In WUForecast.hourly_forecast()
+            TempFCasts.Add(New TemperaturePart With {.PartDate = New Date(CInt(HF.FCTTIME.year), CInt(HF.FCTTIME.mon), CInt(HF.FCTTIME.mday)), .PartHour = CInt(HF.FCTTIME.hour), .Temperature = CDec(HF.temp.metric)})
+        Next
+    End Sub
+    Sub GetWWTemperature()
+        TempFCasts = New List(Of TemperaturePart)
+        Dim WWForecast As WWForecast = GetWWTemperatureForecast(Of WWForecast)()
+        For Each Day As Day In WWForecast.forecasts.temperature.days()
+            For Each Entry As Entry In Day.entries()
+                TempFCasts.Add(New TemperaturePart With {.PartDate = Day.dateTime.Date, .PartHour = Entry.dateTime.Hour, .Temperature = Entry.temperature})
+            Next
+        Next
+    End Sub
+#End Region
+#Region "Tariffs"
+    Sub LoadTariffConfig()
+        Try
+            Dim TariffConfigFile As String = New StreamReader(AppContext.BaseDirectory & My.Settings.TariffConfigFile).ReadToEnd
+            TariffDefinition = JsonConvert.DeserializeObject(Of Tariff)(TariffConfigFile)
+            Dim MaxFIT As Decimal = 0
+            Dim MaxCost As Decimal = 0
+            For Each TariffItem As TariffItem In TariffDefinition.TariffItems()
+                With TariffItem
+                    If .FITRate > MaxFIT Then MaxFIT = .FITRate
+                    If .ConsumptionRate > MaxCost Then MaxCost = .ConsumptionRate
+                End With
+            Next
+            For Each TariffItem As TariffItem In TariffDefinition.TariffItems()
+                With TariffItem
+                    .MaxCost = MaxCost
+                    .MaxFIT = MaxFIT
+                End With
+            Next
+        Catch ex As Exception
+
+        End Try
+    End Sub
+    Sub BuildTariffMap()
+        TariffMap = New List(Of TariffPart)
+        Dim TMD = From TIs In TariffDefinition.TariffItems
+                  Where TIs.IsDefault = True
+                  Select TIs.ConsumptionRate, TIs.FITRate, TIs.OffsetPriority, TIs.FITPriority, TIs.StandbyPreferred, TIs.IsDefault, TIs.Name, TIs.IsOffPeak
+        For i As DayOfWeek = DayOfWeek.Sunday To DayOfWeek.Saturday
+            For j = 0 To 23
+                Dim il = i
+                Dim jl = j
+                Dim TMs = From TPs In TariffDefinition.TariffPeriods
+                          Join TIs In TariffDefinition.TariffItems
+                            On TPs.Tariff Equals TIs.Name
+                          Where TPs.StartHour <= jl And
+                               TPs.EndHour >= jl And
+                               ((TPs.Sun And il = DayOfWeek.Sunday) Or
+                                (TPs.Mon And il = DayOfWeek.Monday) Or
+                                (TPs.Tue And il = DayOfWeek.Tuesday) Or
+                                (TPs.Wed And il = DayOfWeek.Wednesday) Or
+                                (TPs.Thu And il = DayOfWeek.Thursday) Or
+                                (TPs.Fri And il = DayOfWeek.Friday) Or
+                                (TPs.Sat And il = DayOfWeek.Saturday))
+                          Order By ((jl - TPs.StartHour) + (TPs.EndHour - jl))
+                          Select TPs.Cooling, TPs.Heating, TPs.LoadPercentage, TPs.Tariff, TIs.ConsumptionRate, TIs.FITRate, TIs.OffsetPriority, TIs.FITPriority, TIs.StandbyPreferred, TIs.IsDefault, TIs.IsOffPeak
+                If TMs.Count > 0 Then
+                    TariffMap.Add(New TariffPart With {.DOW = il, .Hour = jl, .Cooling = TMs(0).Cooling, .Heating = TMs(0).Heating, .LoadPercentage = TMs(0).LoadPercentage, .ConsumptionRate = TMs(0).ConsumptionRate, .FITRate = TMs(0).FITRate, .FITPriority = TMs(0).FITPriority, .OffsetPriority = TMs(0).OffsetPriority, .StandbyPreferred = TMs(0).StandbyPreferred, .Tariff = TMs(0).Tariff, .IsOffPeak = TMs(0).IsDefault})
+                Else
+                    TariffMap.Add(New TariffPart With {.DOW = il, .Hour = jl, .Cooling = False, .Heating = False, .LoadPercentage = 0, .ConsumptionRate = TMD(0).ConsumptionRate, .FITRate = TMD(0).FITRate, .FITPriority = TMD(0).FITPriority, .OffsetPriority = TMD(0).OffsetPriority, .StandbyPreferred = TMD(0).StandbyPreferred, .Tariff = TMD(0).Name, .IsOffPeak = TMD(0).IsOffPeak})
+                End If
+            Next j
+        Next i
+    End Sub
 #End Region
 End Class

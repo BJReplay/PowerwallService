@@ -80,7 +80,7 @@
     <Setting Name="TariffFeedInRate" Type="System.Single" Scope="Application">
       <Value Profile="(Default)">11.3</Value>
     </Setting>
-    <Setting Name="PWRoundTripEfficiency" Type="System.Single" Scope="Application">
+    <Setting Name="PWRoundTripEfficiency" Type="System.Decimal" Scope="Application">
       <Value Profile="(Default)">0.85</Value>
     </Setting>
     <Setting Name="LogAzureOnly" Type="System.Boolean" Scope="Application">
@@ -207,6 +207,48 @@
     </Setting>
     <Setting Name="PVSystem2Tilt" Type="System.Int32" Scope="Application">
       <Value Profile="(Default)">0</Value>
+    </Setting>
+    <Setting Name="WULocation" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">zmw:00000.19.95864</Value>
+    </Setting>
+    <Setting Name="WUAPIKey" Type="System.String" Scope="Application">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="WUAddress" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">http://api.wunderground.com/api/{0}/hourly10day/q/{1}.json</Value>
+    </Setting>
+    <Setting Name="WUGetWeather" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="WWLocation" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">14152</Value>
+    </Setting>
+    <Setting Name="WWAPIKey" Type="System.String" Scope="Application">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="WWAddress" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">https://api.willyweather.com.au/v2/{0}/locations/{1}/weather.json?forecasts=temperature&amp;days=2</Value>
+    </Setting>
+    <Setting Name="WWGetWeather" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="CDDBase" Type="System.Decimal" Scope="Application">
+      <Value Profile="(Default)">25.0</Value>
+    </Setting>
+    <Setting Name="CDDFactor" Type="System.Decimal" Scope="Application">
+      <Value Profile="(Default)">3.77476144</Value>
+    </Setting>
+    <Setting Name="HDDBase" Type="System.Decimal" Scope="Application">
+      <Value Profile="(Default)">15.0</Value>
+    </Setting>
+    <Setting Name="HDDFactor" Type="System.Decimal" Scope="Application">
+      <Value Profile="(Default)">0.9456908</Value>
+    </Setting>
+    <Setting Name="DaysFactor" Type="System.Decimal" Scope="Application">
+      <Value Profile="(Default)">17.28104</Value>
+    </Setting>
+    <Setting Name="TariffConfigFile" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">tariffs.json</Value>
     </Setting>
   </Settings>
 </SettingsFile>
