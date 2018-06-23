@@ -1073,7 +1073,7 @@ Public Class PowerwallService
     Function GetPWSecureAPIResult(Of JSONType)(API As String, Optional ForceReLogin As Boolean = False) As JSONType
         Try
             PWToken = LoginPWLocal(ForceReLogin:=ForceReLogin)
-            Dim request As WebRequest = WebRequest.Create(My.Settings.PWGatewayAddress & "/api/" & API)
+            Dim request As WebRequest = GetPWRequest(API)
             request.Headers.Add("Authorization", "Bearer " & PWToken)
             Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
             Dim dataStream As Stream = response.GetResponseStream()
@@ -1086,10 +1086,18 @@ Public Class PowerwallService
             EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
         End Try
     End Function
+    Private Shared Function GetPWRequest(API As String) As WebRequest
+        Dim wr As HttpWebRequest
+        wr = CType(WebRequest.Create(My.Settings.PWGatewayAddress & "/api/" & API), HttpWebRequest)
+        wr.ServerCertificateValidationCallback = Function()
+                                                     Return True
+                                                 End Function
+        Return wr
+    End Function
     Function GetPWSecureConfigCompleted(API As String, Optional ForceReLogin As Boolean = False) As Integer
         Try
             PWToken = LoginPWLocal(ForceReLogin:=ForceReLogin)
-            Dim request As WebRequest = WebRequest.Create(My.Settings.PWGatewayAddress & "/api/" & API)
+            Dim request As WebRequest = GetPWRequest(API)
             request.Headers.Add("Authorization", "Bearer " & PWToken)
             Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
             Dim dataStream As Stream = response.GetResponseStream()
@@ -1108,7 +1116,7 @@ Public Class PowerwallService
             PWToken = LoginPWLocal(ForceReLogin:=ForceReLogin)
             Dim BodyPostData As String = JsonConvert.SerializeObject(Settings).ToString
             Dim BodyByteStream As Byte() = Encoding.UTF8.GetBytes(BodyPostData)
-            Dim request As WebRequest = WebRequest.Create(My.Settings.PWGatewayAddress & "/api/" & API)
+            Dim request As WebRequest = GetPWRequest(API)
             request.Headers.Add("Authorization", "Bearer " & PWToken)
             request.Method = "POST"
             request.ContentType = "application/json"
@@ -1137,7 +1145,7 @@ Public Class PowerwallService
                 }
                 Dim BodyPostData As String = JsonConvert.SerializeObject(LoginRequest).ToString
                 Dim BodyByteStream As Byte() = Encoding.ASCII.GetBytes(BodyPostData)
-                Dim request As WebRequest = WebRequest.Create(My.Settings.PWGatewayAddress & "/api/login/Basic")
+                Dim request As WebRequest = GetPWRequest("login/Basic")
                 request.Method = "POST"
                 request.ContentType = "application/json"
                 request.ContentLength = BodyByteStream.Length
