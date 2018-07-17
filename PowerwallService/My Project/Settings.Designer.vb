@@ -412,7 +412,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("TODO@gmail.com")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("installer")>  _
         Public ReadOnly Property PWGatewayUsername() As String
             Get
                 Return CType(Me("PWGatewayUsername"),String)

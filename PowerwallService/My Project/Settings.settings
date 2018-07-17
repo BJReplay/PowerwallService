@@ -128,7 +128,7 @@
       <Value Profile="(Default)">TODO</Value>
     </Setting>
     <Setting Name="PWGatewayUsername" Type="System.String" Scope="Application">
-      <Value Profile="(Default)">TODO@gmail.com</Value>
+      <Value Profile="(Default)">installer</Value>
     </Setting>
     <Setting Name="PWGatewayPassword" Type="System.String" Scope="Application">
       <Value Profile="(Default)">STTODO</Value>
