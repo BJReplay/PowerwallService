@@ -115,6 +115,7 @@ Public Class PowerwallService
         Await Task.Run(Sub()
                            LoadTariffConfig()
                            DoHourlyTasks(Now)
+                           DoAsyncStartupProcesses()
                        End Sub)
     End Sub
 #End Region
@@ -168,7 +169,7 @@ Public Class PowerwallService
                 SyncLock PWLock
                     ChargeSettings = New Operation With {.backup_reserve_percent = My.Settings.PWForceBackupPercentage, .mode = My.Settings.PWForceMode}
                     NewChargeSettings = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
-                    APIResult = GetPWSecureConfigCompleted("config/completed")
+                    APIResult = GetPWSecure("config/completed")
                     RunningResult = GetPWRunning()
                 End SyncLock
                 If APIResult = 202 Then
@@ -1021,7 +1022,7 @@ Public Class PowerwallService
             Dim APIResult As Integer
             SyncLock PWLock
                 NewChargeSettings = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
-                APIResult = GetPWSecureConfigCompleted("config/completed")
+                APIResult = GetPWSecure("config/completed")
                 RunningResult = GetPWRunning()
             End SyncLock
             If APIResult = 202 Then
@@ -1042,7 +1043,7 @@ Public Class PowerwallService
         SkipObservation = False
     End Function
     Private Function GetPWRunning() As Integer
-        GetPWRunning = GetUnsecured(My.Settings.PWGatewayAddress & "/api/sitemaster/run")
+        GetPWRunning = GetPWSecure("sitemaster/run")
     End Function
     Private Sub GetPWMode()
         If My.Settings.PWControlEnabled Then
@@ -1053,7 +1054,7 @@ Public Class PowerwallService
                     Dim CurrentChargeSettings As Operation
                     SyncLock PWLock
                         CurrentChargeSettings = GetPWSecureAPIResult(Of Operation)("operation", ForceReLogin:=True)
-                        APIResult = GetPWSecureConfigCompleted("config/completed")
+                        APIResult = GetPWSecure("config/completed")
                         RunningResult = GetPWRunning()
                     End SyncLock
                     If APIResult = 202 Then
@@ -1094,7 +1095,7 @@ Public Class PowerwallService
                                                  End Function
         Return wr
     End Function
-    Function GetPWSecureConfigCompleted(API As String, Optional ForceReLogin As Boolean = False) As Integer
+    Function GetPWSecure(API As String, Optional ForceReLogin As Boolean = False) As Integer
         Try
             PWToken = LoginPWLocal(ForceReLogin:=ForceReLogin)
             Dim request As WebRequest = GetPWRequest(API)
@@ -1103,7 +1104,7 @@ Public Class PowerwallService
             Dim dataStream As Stream = response.GetResponseStream()
             Dim reader As StreamReader = New StreamReader(dataStream)
             Dim responseFromServer As String = reader.ReadToEnd()
-            GetPWSecureConfigCompleted = response.StatusCode
+            GetPWSecure = response.StatusCode
             reader.Close()
             response.Close()
         Catch Ex As Exception
@@ -1141,7 +1142,8 @@ Public Class PowerwallService
                 Dim LoginRequest As New LoginRequest With {
                     .username = My.Settings.PWGatewayUsername,
                     .password = My.Settings.PWGatewayPassword,
-                    .force_sm_off = False
+                    .email = String.Empty,
+                    .force_sm_off = True
                 }
                 Dim BodyPostData As String = JsonConvert.SerializeObject(LoginRequest).ToString
                 Dim BodyByteStream As Byte() = Encoding.ASCII.GetBytes(BodyPostData)

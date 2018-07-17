@@ -147,6 +147,7 @@ Public Class PWJson
     Public Class LoginRequest
         Public Property username As String
         Public Property password As String
+        Public Property email As String
         Public Property force_sm_off As Boolean
     End Class
     Public Class LoginResult
