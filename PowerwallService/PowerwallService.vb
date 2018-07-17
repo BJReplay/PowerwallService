@@ -763,6 +763,14 @@ Public Class PowerwallService
     Private Function GetPWRunning() As Integer
         GetPWRunning = GetUnsecured(My.Settings.PWGatewayAddress & "/api/sitemaster/run")
     End Function
+    Private Shared Function GetPWRequest(API As String) As WebRequest
+        Dim wr As HttpWebRequest
+        wr = CType(WebRequest.Create(My.Settings.PWGatewayAddress & "/api/" & API), HttpWebRequest)
+        wr.ServerCertificateValidationCallback = Function()
+                                                     Return True
+                                                 End Function
+        Return wr
+    End Function
     Private Sub GetPWMode()
         Dim RunningResult As Integer
         Try
