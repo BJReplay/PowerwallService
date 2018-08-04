@@ -1027,11 +1027,11 @@ Public Class PowerwallService
                 RunningResult = GetPWRunning()
             End SyncLock
             If APIResult = 202 Then
-                EventLog.WriteEntry(String.Format("Entered {5} Mode: Current SOC={0}, Current Target={1}, Set Mode={2}, Set Backup Percentage={3}, APIResult = {4}, Reason = {5}", SOC.percentage, Target, NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionType, ActionMessage), EventLogEntryType.Information, 512)
+                EventLog.WriteEntry(String.Format("Entered {5} Mode: Current SOC={0}, Current Target={1}, Set Mode={2}, Set Backup Percentage={3}, APIResult = {4}, Reason = {6}", SOC.percentage, Target, NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionType, ActionMessage), EventLogEntryType.Information, 512)
                 AboveMinBackup = (NewChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
                 Intent = ActionType
             Else
-                EventLog.WriteEntry(String.Format("Failed to Enter {5} Mode: Current SOC={0}, Attempted Target={1}, Mode={2}, BackupPercentage={3}, APIResult = {4}, Reason = {5}", SOC.percentage, Target, NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionType, ActionMessage), EventLogEntryType.Warning, 513)
+                EventLog.WriteEntry(String.Format("Failed to Enter {5} Mode: Current SOC={0}, Attempted Target={1}, Mode={2}, BackupPercentage={3}, APIResult = {4}, Reason = {6}", SOC.percentage, Target, NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionType, ActionMessage), EventLogEntryType.Warning, 513)
                 Intent = String.Format("Trying to Enter {0}", ActionType)
             End If
             SetPWMode = APIResult
