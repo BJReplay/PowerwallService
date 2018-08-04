@@ -43,6 +43,7 @@ Public Class PowerwallService
     Shared PreCharging As Boolean = False
     Shared OnStandby As Boolean = False
     Shared AboveMinBackup As Boolean = False
+    Shared AutonomousMode As Boolean = False
     Shared LastTarget As Integer = 0
     Shared OffPeakStart As DateTime
     Shared PeakStart As DateTime
@@ -599,7 +600,7 @@ Public Class PowerwallService
                 ElseIf (InvokedTime >= OffPeakStart And InvokedTime < PeakStart And InvokedTime > OperationLockout) Then
                     If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Off Peak Period: Current SOC={0}, Minimum required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 500)
                     If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Off Peak Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OffPeakStart, PeakStart), EventLogEntryType.Information, 714)
-                    If NextDayAllDayOffPeak And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                    If NextDayAllDayOffPeak And (Not OnStandby Or SOC.percentage > LastTarget) And Not AutonomousMode Then
                         If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
                             OnStandby = True
                             PreCharging = False
@@ -609,7 +610,7 @@ Public Class PowerwallService
                             OnStandby = True
                             PreCharging = False
                         End If
-                    ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And CurrentDayAllOffPeak And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                    ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And CurrentDayAllOffPeak And Not AutonomousMode And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
                         If SetPWMode("Current SOC above weekend target, standby on target enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
                             OnStandby = True
                             PreCharging = False
@@ -1026,11 +1027,11 @@ Public Class PowerwallService
                 RunningResult = GetPWRunning()
             End SyncLock
             If APIResult = 202 Then
-                EventLog.WriteEntry(String.Format("Entered {5} Mode: Current SOC={0}, Current Target={1}, Set Mode={2}, Set Backup Percentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionType), EventLogEntryType.Information, 512)
+                EventLog.WriteEntry(String.Format("Entered {5} Mode: Current SOC={0}, Current Target={1}, Set Mode={2}, Set Backup Percentage={3}, APIResult = {4}, Reason = {5}", SOC.percentage, Target, NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionType, ActionMessage), EventLogEntryType.Information, 512)
                 AboveMinBackup = (NewChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
                 Intent = ActionType
             Else
-                EventLog.WriteEntry(String.Format("Failed to Enter {5} Mode: Current SOC={0}, Attempted Target={1}, Mode={2}, BackupPercentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionType), EventLogEntryType.Warning, 513)
+                EventLog.WriteEntry(String.Format("Failed to Enter {5} Mode: Current SOC={0}, Attempted Target={1}, Mode={2}, BackupPercentage={3}, APIResult = {4}, Reason = {5}", SOC.percentage, Target, NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionType, ActionMessage), EventLogEntryType.Warning, 513)
                 Intent = String.Format("Trying to Enter {0}", ActionType)
             End If
             SetPWMode = APIResult
@@ -1060,6 +1061,7 @@ Public Class PowerwallService
                     If APIResult = 202 Then
                         EventLog.WriteEntry(String.Format("Current PW Mode={0}, BackupPercentage={1}, APIResult = {2}", CurrentChargeSettings.real_mode, CurrentChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Information, 602)
                         AboveMinBackup = (CurrentChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
+                        AutonomousMode = (CurrentChargeSettings.real_mode = "autonomous")
                     Else
                         EventLog.WriteEntry("Failed to obtain current operation mode", EventLogEntryType.Warning, 513)
                     End If
