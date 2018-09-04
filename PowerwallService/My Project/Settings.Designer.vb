@@ -15,7 +15,7 @@ Option Explicit On
 Namespace My
     
     <Global.System.Runtime.CompilerServices.CompilerGeneratedAttribute(),  _
-     Global.System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "15.5.0.0"),  _
+     Global.System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "15.8.0.0"),  _
      Global.System.ComponentModel.EditorBrowsableAttribute(Global.System.ComponentModel.EditorBrowsableState.Advanced)>  _
     Partial Friend NotInheritable Class MySettings
         Inherits Global.System.Configuration.ApplicationSettingsBase
@@ -292,9 +292,9 @@ Namespace My
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
          Global.System.Configuration.DefaultSettingValueAttribute("0.85")>  _
-        Public ReadOnly Property PWRoundTripEfficiency() As Single
+        Public ReadOnly Property PWRoundTripEfficiency() As Decimal
             Get
-                Return CType(Me("PWRoundTripEfficiency"),Single)
+                Return CType(Me("PWRoundTripEfficiency"),Decimal)
             End Get
         End Property
         
@@ -412,7 +412,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("TODO@gmail.com")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("installer")>  _
         Public ReadOnly Property PWGatewayUsername() As String
             Get
                 Return CType(Me("PWGatewayUsername"),String)

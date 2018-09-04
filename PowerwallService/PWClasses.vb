@@ -142,11 +142,12 @@ Public Class PWJson
     End Class
     Public Class Operation
         Public Property backup_reserve_percent As Integer
-        Public Property mode As String
+        Public Property real_mode As String
     End Class
     Public Class LoginRequest
         Public Property username As String
         Public Property password As String
+        Public Property email As String
         Public Property force_sm_off As Boolean
     End Class
     Public Class LoginResult

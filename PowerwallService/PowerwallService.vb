@@ -145,15 +145,15 @@ Public Class PowerwallService
                 Dim NewChargeSettings As Operation
                 Dim APIResult As Integer
                 SyncLock PWLock
-                    ChargeSettings = New Operation With {.backup_reserve_percent = My.Settings.PWForceBackupPercentage, .mode = My.Settings.PWForceMode}
+                    ChargeSettings = New Operation With {.backup_reserve_percent = My.Settings.PWForceBackupPercentage, .real_mode = My.Settings.PWForceMode}
                     NewChargeSettings = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
-                    APIResult = GetPWSecureConfigCompleted("config/completed")
+                    APIResult = GetPWSecure("config/completed")
                     RunningResult = GetPWRunning()
                 End SyncLock
                 If APIResult = 202 Then
-                    EventLog.WriteEntry(String.Format("Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Information, 600)
+                    EventLog.WriteEntry(String.Format("Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Information, 600)
                 Else
-                    EventLog.WriteEntry(String.Format("Failed to Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Warning, 601)
+                    EventLog.WriteEntry(String.Format("Failed to Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Warning, 601)
                 End If
             Catch ex As Exception
                 SyncLock PWLock
@@ -735,20 +735,20 @@ Public Class PowerwallService
         Try
             If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format(ActionMessage & " Current SOC={0}, Current Target={1}", SOC.percentage, Target), EventLogEntryType.Information, 511)
             Intent = ActionType
-            Dim ChargeSettings As New Operation With {.backup_reserve_percent = LastTarget, .mode = Mode}
+            Dim ChargeSettings As New Operation With {.backup_reserve_percent = LastTarget, .real_mode = Mode}
             Dim NewChargeSettings As Operation
             Dim APIResult As Integer
             SyncLock PWLock
                 NewChargeSettings = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
-                APIResult = GetPWSecureConfigCompleted("config/completed")
+                APIResult = GetPWSecure("config/completed")
                 RunningResult = GetPWRunning()
             End SyncLock
             If APIResult = 202 Then
-                EventLog.WriteEntry(String.Format("{5}ed {6} Mode: Current SOC={0}, Current Target={1}, Set Mode={2}, Set Backup Percentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Information, 512)
+                EventLog.WriteEntry(String.Format("{5}ed {6} Mode: Current SOC={0}, Current Target={1}, Set Mode={2}, Set Backup Percentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Information, 512)
                 AboveMinBackup = (NewChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
                 Intent = ActionType
             Else
-                EventLog.WriteEntry(String.Format("Failed to {5} {6} Mode: Current SOC={0}, Attempted Target={1}, Mode={2}, BackupPercentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Warning, 513)
+                EventLog.WriteEntry(String.Format("Failed to {5} {6} Mode: Current SOC={0}, Attempted Target={1}, Mode={2}, BackupPercentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Warning, 513)
                 Intent = String.Format("Trying to {0} {1}", ActionMode, ActionType)
             End If
             SetPWMode = APIResult
@@ -779,11 +779,11 @@ Public Class PowerwallService
                 Dim CurrentChargeSettings As Operation
                 SyncLock PWLock
                     CurrentChargeSettings = GetPWSecureAPIResult(Of Operation)("operation", ForceReLogin:=True)
-                    APIResult = GetPWSecureConfigCompleted("config/completed")
+                    APIResult = GetPWSecure("config/completed")
                     RunningResult = GetPWRunning()
                 End SyncLock
                 If APIResult = 202 Then
-                    EventLog.WriteEntry(String.Format("Current PW Mode={0}, BackupPercentage={1}, APIResult = {2}", CurrentChargeSettings.mode, CurrentChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Information, 602)
+                    EventLog.WriteEntry(String.Format("Current PW Mode={0}, BackupPercentage={1}, APIResult = {2}", CurrentChargeSettings.real_mode, CurrentChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Information, 602)
                     AboveMinBackup = (CurrentChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
                 Else
                     EventLog.WriteEntry("Failed to obtain current operation mode", EventLogEntryType.Warning, 513)
@@ -811,16 +811,16 @@ Public Class PowerwallService
             EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
         End Try
     End Function
-    Function GetPWSecureConfigCompleted(API As String, Optional ForceReLogin As Boolean = False) As Integer
+    Function GetPWSecure(API As String, Optional ForceReLogin As Boolean = False) As Integer
         Try
             PWToken = LoginPWLocal(ForceReLogin:=ForceReLogin)
-            Dim request As WebRequest = WebRequest.Create(My.Settings.PWGatewayAddress & "/api/" & API)
+            Dim request As WebRequest = GetPWRequest(API)
             request.Headers.Add("Authorization", "Bearer " & PWToken)
             Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
             Dim dataStream As Stream = response.GetResponseStream()
             Dim reader As StreamReader = New StreamReader(dataStream)
             Dim responseFromServer As String = reader.ReadToEnd()
-            GetPWSecureConfigCompleted = response.StatusCode
+            GetPWSecure = response.StatusCode
             reader.Close()
             response.Close()
         Catch Ex As Exception
@@ -833,7 +833,7 @@ Public Class PowerwallService
             PWToken = LoginPWLocal(ForceReLogin:=ForceReLogin)
             Dim BodyPostData As String = JsonConvert.SerializeObject(Settings).ToString
             Dim BodyByteStream As Byte() = Encoding.UTF8.GetBytes(BodyPostData)
-            Dim request As WebRequest = WebRequest.Create(My.Settings.PWGatewayAddress & "/api/" & API)
+            Dim request As WebRequest = GetPWRequest(API)
             request.Headers.Add("Authorization", "Bearer " & PWToken)
             request.Method = "POST"
             request.ContentType = "application/json"
@@ -862,7 +862,7 @@ Public Class PowerwallService
                 }
                 Dim BodyPostData As String = JsonConvert.SerializeObject(LoginRequest).ToString
                 Dim BodyByteStream As Byte() = Encoding.ASCII.GetBytes(BodyPostData)
-                Dim request As WebRequest = WebRequest.Create(My.Settings.PWGatewayAddress & "/api/login/Basic")
+                Dim request As WebRequest = GetPWRequest("login/Basic")
                 request.Method = "POST"
                 request.ContentType = "application/json"
                 request.ContentLength = BodyByteStream.Length
