@@ -761,7 +761,7 @@ Public Class PowerwallService
         SkipObservation = False
     End Function
     Private Function GetPWRunning() As Integer
-        GetPWRunning = GetUnsecured(My.Settings.PWGatewayAddress & "/api/sitemaster/run")
+        GetPWRunning = GetPWSecure("sitemaster/run")
     End Function
     Private Shared Function GetPWRequest(API As String) As WebRequest
         Dim wr As HttpWebRequest
