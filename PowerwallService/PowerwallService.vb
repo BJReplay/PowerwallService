@@ -277,7 +277,7 @@ Public Class PowerwallService
             OffPeakStartHour = My.Settings.TariffPeakEndWeekday
             PeakStartHour = My.Settings.TariffPeakStartWeekday
         End If
-        If My.Settings.TariffIgnoresDST And TZI.IsDaylightSavingTime(InvokedTime) Then
+        If My.Settings.TariffIgnoresDST And TZI.IsDaylightSavingTime(InvokedTime) And (Not (CurrentDOW = DayOfWeek.Saturday Or CurrentDOW = DayOfWeek.Sunday) Or My.Settings.TariffPeakOnWeekends) Then
             OffPeakStartHour += CByte(1)
             If OffPeakStartHour > 23 Then OffPeakStartHour -= CByte(24)
             PeakStartHour += CByte(1)
