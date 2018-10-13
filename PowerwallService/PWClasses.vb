@@ -141,7 +141,7 @@ Public Class PWJson
         Public Property timed_out_registration As Boolean
     End Class
     Public Class Operation
-        Public Property backup_reserve_percent As Integer
+        Public Property backup_reserve_percent As Decimal
         Public Property real_mode As String
     End Class
     Public Class LoginRequest
