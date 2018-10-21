@@ -196,7 +196,7 @@ Public Class PowerwallService
         EventLog.WriteEntry("Powerwall Service Paused", EventLogEntryType.Information, 105)
     End Sub
     Protected Overrides Sub OnStop()
-        EventLog.WriteEntry("Powerwall Service Stoping", EventLogEntryType.Information, 106)
+        EventLog.WriteEntry("Powerwall Service Stopping", EventLogEntryType.Information, 106)
         ObservationTimer.Stop()
         ObservationTimer.Dispose()
         OneMinuteTime.Stop()
