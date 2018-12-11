@@ -536,125 +536,125 @@ Public Class PowerwallService
     End Function
 #End Region
 #Region "Insolation Forecasts and Charge Targets"
-    Sub OperateBasedOnTariff()
-        Dim InvokedTime As DateTime = Now
-        SetTariffHours(InvokedTime)
-        If Not FirstReadingsAvailable Then
-            GetObservationAndStore()
-        End If
-        GetForecasts()
-        Dim RawTargetSOC As Integer
-        Dim ShortfallInsolation As Single = 0
-        Dim NoStandbyTargetSOC As Single = 0
-        Dim StandbyTargetSOC As Single = 0
-        Dim RemainingOvernightRatio As Single
-        Dim RemainingInsolationToday As Single
-        Dim ForecastInsolationTomorrow As Single
-        Dim PWPeakConsumption As Integer = CInt(IIf(CurrentDOW = DayOfWeek.Saturday Or CurrentDOW = DayOfWeek.Sunday, My.Settings.PWPeakConsumptionWeekend, My.Settings.PWPeakConsumption))
-        Dim RemainingOffPeak As Single
-        Dim Intent As String = "Thinking"
-        Dim NewTarget As Single = 0
-        If InvokedTime > Sunrise And InvokedTime < Sunset Then
-            RemainingOvernightRatio = 1
-            RemainingInsolationToday = CurrentDayForecast.PVEstimate
-            ForecastInsolationTomorrow = NextDayForecastGeneration
-            ShortfallInsolation = 0
-            Intent = "Sun is Up"
-        ElseIf InvokedTime > PeakStart And InvokedTime < Sunrise Then
-            RemainingOvernightRatio = 0
-            RemainingInsolationToday = CurrentDayForecast.PVEstimate
-            ForecastInsolationTomorrow = NextDayForecastGeneration
-            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
-            Intent = "Waiting for Sunrise"
-        ElseIf InvokedTime > Sunset And InvokedTime < OffPeakStart Then
-            RemainingOvernightRatio = 1
-            RemainingInsolationToday = 0
-            ForecastInsolationTomorrow = NextDayForecastGeneration
-            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
-            Intent = "Waiting for Off Peak"
-        ElseIf InvokedTime > OffPeakStart And InvokedTime < PeakStart Then
-            RemainingOvernightRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, PeakStart) + 1) / OffPeakHours)
-            If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
-            If RemainingOvernightRatio > 1 Then RemainingOvernightRatio = 1
-            RemainingInsolationToday = NextDayForecastGeneration
-            ForecastInsolationTomorrow = 0
-            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
-            Intent = "Monitoring"
-        End If
-        RemainingOffPeak = My.Settings.PWOvernightLoad * RemainingOvernightRatio
-        RawTargetSOC = My.Settings.PWMorningBuffer + CInt(RemainingOffPeak)
-        If ShortfallInsolation < 0 Then ShortfallInsolation = 0
-        NoStandbyTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
-        If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
-        StandbyTargetSOC = My.Settings.PWMorningBuffer + (ShortfallInsolation / My.Settings.PWCapacity * 100)
-        If StandbyTargetSOC > 100 Then StandbyTargetSOC = 100
-        NewTarget = CSng(IIf(My.Settings.PWOvernightStandby, StandbyTargetSOC, NoStandbyTargetSOC))
-        If InvokedTime > Sunset And InvokedTime < OffPeakStart Then
-            If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Then Intent = "Planning to Charge" Else Intent = "No Charging Required"
-        End If
-        If My.Settings.PWControlEnabled Then
-            Try
-                If InvokedTime > DateAdd(DateInterval.Minute, -10, PeakStart) And Not CurrentDayAllOffPeak And (PreCharging Or AboveMinBackup Or OnStandby) Then
-                    OperationLockout = PeakStart
-                    EventLog.WriteEntry(String.Format("Reaching end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, StandbyTargetSOC), EventLogEntryType.Information, 504)
-                    DoExitCharging(Intent)
-                ElseIf (InvokedTime >= OffPeakStart And InvokedTime < PeakStart And InvokedTime > OperationLockout) Then
-                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Off Peak Period: Current SOC={0}, Minimum required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 500)
-                    If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Off Peak Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OffPeakStart, PeakStart), EventLogEntryType.Information, 714)
-                    If NextDayAllDayOffPeak And (Not OnStandby Or SOC.percentage > LastTarget) And Not AutonomousMode Then
-                        If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
-                            OnStandby = True
-                            PreCharging = False
-                        End If
-                    ElseIf My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                        If SetPWMode("Current SOC above required morning SOC, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
-                            OnStandby = True
-                            PreCharging = False
-                        End If
-                    ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And CurrentDayAllOffPeak And Not AutonomousMode And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                        If SetPWMode("Current SOC above weekend target, standby on target enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
-                            OnStandby = True
-                            PreCharging = False
-                        End If
-                    ElseIf (SOC.percentage < StandbyTargetSOC And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (SOC.percentage < NoStandbyTargetSOC And Not OnStandby And Not PreCharging) Then
-                        If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 501)
-                        If SetPWMode("Current SOC below required morning SOC", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
-                            PreCharging = True
-                            OnStandby = False
-                        End If
-                    ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby And My.Settings.PWOvernightStandby Then
-                        EventLog.WriteEntry(String.Format("Current SOC above required setting and Standby Mode Enabled: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 505)
-                        If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
-                            OnStandby = True
-                            PreCharging = False
-                        End If
-                    ElseIf (LastTarget < NewTarget And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (LastTarget < NewTarget And PreCharging) Then
-                        If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
-                        If SetPWMode("Current SOC below required morning SOC", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
-                            PreCharging = True
-                            OnStandby = False
-                        End If
-                    ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby Then
-                        EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
-                        DoExitCharging(Intent)
-                    End If
-                Else
-                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage), EventLogEntryType.Information, 503)
-                End If
-            Catch Ex As Exception
-                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 510)
-            End Try
-        End If
-        If My.Settings.PBIChargeIntentEndpoint <> String.Empty Then
-            Try
-                Dim PBIRows As New PBIChargeLogging With {.Rows = New List(Of ChargePlan)}
-                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = My.Settings.PWMorningBuffer, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .RemainingOffPeak = RemainingOffPeak * My.Settings.PWCapacity / 100, .Shortfall = ShortfallInsolation})
-                Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBIChargeIntentEndpoint, PBIRows)
-            Catch ex As Exception
+    'Sub OperateBasedOnTariff()
+    '    Dim InvokedTime As DateTime = Now
+    '    SetTariffHours(InvokedTime)
+    '    If Not FirstReadingsAvailable Then
+    '        GetObservationAndStore()
+    '    End If
+    '    GetForecasts()
+    '    Dim RawTargetSOC As Integer
+    '    Dim ShortfallInsolation As Single = 0
+    '    Dim NoStandbyTargetSOC As Single = 0
+    '    Dim StandbyTargetSOC As Single = 0
+    '    Dim RemainingOvernightRatio As Single
+    '    Dim RemainingInsolationToday As Single
+    '    Dim ForecastInsolationTomorrow As Single
+    '    Dim PWPeakConsumption As Integer = CInt(IIf(CurrentDOW = DayOfWeek.Saturday Or CurrentDOW = DayOfWeek.Sunday, My.Settings.PWPeakConsumptionWeekend, My.Settings.PWPeakConsumption))
+    '    Dim RemainingOffPeak As Single
+    '    Dim Intent As String = "Thinking"
+    '    Dim NewTarget As Single = 0
+    '    If InvokedTime > Sunrise And InvokedTime < Sunset Then
+    '        RemainingOvernightRatio = 1
+    '        RemainingInsolationToday = CurrentDayForecast.PVEstimate
+    '        ForecastInsolationTomorrow = NextDayForecastGeneration
+    '        ShortfallInsolation = 0
+    '        Intent = "Sun is Up"
+    '    ElseIf InvokedTime > PeakStart And InvokedTime < Sunrise Then
+    '        RemainingOvernightRatio = 0
+    '        RemainingInsolationToday = CurrentDayForecast.PVEstimate
+    '        ForecastInsolationTomorrow = NextDayForecastGeneration
+    '        ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
+    '        Intent = "Waiting for Sunrise"
+    '    ElseIf InvokedTime > Sunset And InvokedTime < OffPeakStart Then
+    '        RemainingOvernightRatio = 1
+    '        RemainingInsolationToday = 0
+    '        ForecastInsolationTomorrow = NextDayForecastGeneration
+    '        ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
+    '        Intent = "Waiting for Off Peak"
+    '    ElseIf InvokedTime > OffPeakStart And InvokedTime < PeakStart Then
+    '        RemainingOvernightRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, PeakStart) + 1) / OffPeakHours)
+    '        If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
+    '        If RemainingOvernightRatio > 1 Then RemainingOvernightRatio = 1
+    '        RemainingInsolationToday = NextDayForecastGeneration
+    '        ForecastInsolationTomorrow = 0
+    '        ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
+    '        Intent = "Monitoring"
+    '    End If
+    '    RemainingOffPeak = My.Settings.PWOvernightLoad * RemainingOvernightRatio
+    '    RawTargetSOC = My.Settings.PWMorningBuffer + CInt(RemainingOffPeak)
+    '    If ShortfallInsolation < 0 Then ShortfallInsolation = 0
+    '    NoStandbyTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
+    '    If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
+    '    StandbyTargetSOC = My.Settings.PWMorningBuffer + (ShortfallInsolation / My.Settings.PWCapacity * 100)
+    '    If StandbyTargetSOC > 100 Then StandbyTargetSOC = 100
+    '    NewTarget = CSng(IIf(My.Settings.PWOvernightStandby, StandbyTargetSOC, NoStandbyTargetSOC))
+    '    If InvokedTime > Sunset And InvokedTime < OffPeakStart Then
+    '        If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Then Intent = "Planning to Charge" Else Intent = "No Charging Required"
+    '    End If
+    '    If My.Settings.PWControlEnabled Then
+    '        Try
+    '            If InvokedTime > DateAdd(DateInterval.Minute, -10, PeakStart) And Not CurrentDayAllOffPeak And (PreCharging Or AboveMinBackup Or OnStandby) Then
+    '                OperationLockout = PeakStart
+    '                EventLog.WriteEntry(String.Format("Reaching end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, StandbyTargetSOC), EventLogEntryType.Information, 504)
+    '                DoExitCharging(Intent)
+    '            ElseIf (InvokedTime >= OffPeakStart And InvokedTime < PeakStart And InvokedTime > OperationLockout) Then
+    '                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Off Peak Period: Current SOC={0}, Minimum required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 500)
+    '                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Off Peak Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OffPeakStart, PeakStart), EventLogEntryType.Information, 714)
+    '                If NextDayAllDayOffPeak And (Not OnStandby Or SOC.percentage > LastTarget) And Not AutonomousMode Then
+    '                    If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+    '                        OnStandby = True
+    '                        PreCharging = False
+    '                    End If
+    '                ElseIf My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
+    '                    If SetPWMode("Current SOC above required morning SOC, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+    '                        OnStandby = True
+    '                        PreCharging = False
+    '                    End If
+    '                ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And CurrentDayAllOffPeak And Not AutonomousMode And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
+    '                    If SetPWMode("Current SOC above weekend target, standby on target enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+    '                        OnStandby = True
+    '                        PreCharging = False
+    '                    End If
+    '                ElseIf (SOC.percentage < StandbyTargetSOC And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (SOC.percentage < NoStandbyTargetSOC And Not OnStandby And Not PreCharging) Then
+    '                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 501)
+    '                    If SetPWMode("Current SOC below required morning SOC", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
+    '                        PreCharging = True
+    '                        OnStandby = False
+    '                    End If
+    '                ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby And My.Settings.PWOvernightStandby Then
+    '                    EventLog.WriteEntry(String.Format("Current SOC above required setting and Standby Mode Enabled: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 505)
+    '                    If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+    '                        OnStandby = True
+    '                        PreCharging = False
+    '                    End If
+    '                ElseIf (LastTarget < NewTarget And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (LastTarget < NewTarget And PreCharging) Then
+    '                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
+    '                    If SetPWMode("Current SOC below required morning SOC", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
+    '                        PreCharging = True
+    '                        OnStandby = False
+    '                    End If
+    '                ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby Then
+    '                    EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
+    '                    DoExitCharging(Intent)
+    '                End If
+    '            Else
+    '                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage), EventLogEntryType.Information, 503)
+    '            End If
+    '        Catch Ex As Exception
+    '            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 510)
+    '        End Try
+    '    End If
+    '    If My.Settings.PBIChargeIntentEndpoint <> String.Empty Then
+    '        Try
+    '            Dim PBIRows As New PBIChargeLogging With {.Rows = New List(Of ChargePlan)}
+    '            PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = My.Settings.PWMorningBuffer, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .RemainingOffPeak = RemainingOffPeak * My.Settings.PWCapacity / 100, .Shortfall = ShortfallInsolation})
+    '            Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBIChargeIntentEndpoint, PBIRows)
+    '        Catch ex As Exception
 
-            End Try
-        End If
-    End Sub
+    '        End Try
+    '    End If
+    'End Sub
     Sub CheckSOCLevel()
         Dim InvokedTime As DateTime = Now
         SetOffPeakHours(InvokedTime)
@@ -1011,13 +1011,17 @@ Public Class PowerwallService
     Private Function SetPWMode(ActionMessage As String, ActionType As String, Target As Double, Mode As String, ByRef Intent As String) As Integer
         Dim RunningResult As Integer
         SkipObservation = True
-        If Target > My.Settings.PWMinBackupPercentage And ActionType <> "Standby" Then
-            Target = Math.Round(Target) + 2
+        If ActionType = "Standby" Then
+            GetPWMode()
+            If Target < PWTarget Then Target = PWTarget
+        Else
+            If Target > My.Settings.PWMinBackupPercentage Then
+                Target = Math.Round(Target) + 2
+            End If
         End If
         If Target > 100 Then Target = 100
         LastTarget = CInt(Target)
-        GetPWMode()
-        If LastTarget < CInt(PWTarget) Then LastTarget = CInt(PWTarget)
+        PWTarget = CDec(Target)
         Try
             If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format(ActionMessage & " Current SOC={0}, Current Target={1}", SOC.percentage, Target), EventLogEntryType.Information, 511)
             Intent = ActionType
