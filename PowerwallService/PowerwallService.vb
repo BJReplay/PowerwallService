@@ -494,7 +494,7 @@ Public Class PowerwallService
         Try
             Dim NewForecastsRetrieved As Boolean = False
             Dim InvokedTime As DateTime = Now
-            If DateAdd(DateInterval.Minute, 10, ForecastsRetrieved) < InvokedTime Then
+            If DateAdd(DateInterval.Hour, 1, ForecastsRetrieved) < InvokedTime And InvokedTime.Hour < Sunset.Hour Then
                 PVForecast = GetSolCastResult(Of OutputForecast)()
                 CurrentDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 0, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
                 NextDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 1, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
