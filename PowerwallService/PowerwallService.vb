@@ -11,6 +11,13 @@ Imports PowerwallService.PowerBIStreaming
 #End Region
 Public Class PowerwallService
 #Region "Variables"
+    Private Enum PWStatusEnum
+        Charging
+        Discharging
+        Standby
+    End Enum
+    Const self_consumption As String = "self_consumption"
+    Const backup As String = "backup"
     Private ObsTA As New PWHistoryDataSetTableAdapters.observationsTableAdapter
     Private SolarTA As New PWHistoryDataSetTableAdapters.solarTableAdapter
     Private SOCTA As New PWHistoryDataSetTableAdapters.socTableAdapter
@@ -21,11 +28,11 @@ Public Class PowerwallService
     Private CompactTALocal As New PWHistoryDataSetTableAdapters.CompactObsTALocal
     Private Get5MinuteAveragesTA As New PWHistoryDataSetTableAdapters.spGet5MinuteAveragesTableAdapter
     Private SPs As New PWHistoryDataSetTableAdapters.SPs
-    Private ObservationTimer As New System.Timers.Timer
+    Private SixSecondTimer As New System.Timers.Timer
     Private OneMinuteTime As New System.Timers.Timer
-    Private ReportingTimer As New System.Timers.Timer
-    Private ForecastTimer As New System.Timers.Timer
-    Private PWToken As String = String.Empty
+    Private FiveMinuteTimer As New System.Timers.Timer
+    Private TenMinuteTimer As New System.Timers.Timer
+    Shared PWToken As String = String.Empty
     Shared NextDayForecastGeneration As Single = 0
     Shared NextDayMorningGeneration As Single = 0
     Shared MeterReading As MeterAggregates
@@ -60,9 +67,14 @@ Public Class PowerwallService
     Shared DBLock As New Object
     Shared PWLock As New Object
     Shared SkipObservation As Boolean = False
+    Shared PWStatus As PWStatusEnum = PWStatusEnum.Standby
+    Shared PWIntededStatus As PWStatusEnum = PWStatusEnum.Standby
+    Shared PWIntendedMode As New Operation With {.real_mode = self_consumption, .backup_reserve_percent = 0}
+    Shared CurrentChargeSettings As Operation
+    Shared PendingModeChange As Boolean = False
 #End Region
 #Region "Timer Handlers"
-    Protected Async Sub OnObservationTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
+    Protected Async Sub OnSixSecondTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
         Await Task.Run(Sub()
                            GetObservationAndStore()
                        End Sub)
@@ -72,25 +84,39 @@ Public Class PowerwallService
                            DoPerMinuteTasks()
                        End Sub)
     End Sub
-    Protected Async Sub OnReportingTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
+    Protected Async Sub OnFiveMinuteTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
         Await Task.Run(Sub()
-                           If My.Settings.PVReportingEnabled Then
-                               If My.Settings.PVSendPowerwall Then
-                                   SendPowerwallData(Now)
-                                   If Now.Minute < 6 Then
-                                       If Now.Hour = 0 Then
-                                           DoBackFill(DateAdd(DateInterval.Day, -1, Now))
-                                       Else
-                                           DoBackFill(Now)
-                                       End If
-                                   End If
-                               ElseIf My.Settings.PVSendForecast Then
-                                   SendForecast()
-                               End If
-                           End If
+                           DoFiveMinuteTasks()
                        End Sub)
     End Sub
-    Protected Async Sub OnForecastTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
+    Private Sub DoFiveMinuteTasks()
+        If My.Settings.PVReportingEnabled Then
+            If My.Settings.PVSendPowerwall Then
+                SendPowerwallData(Now)
+                If Now.Minute < 6 Then
+                    If Now.Hour = 0 Then
+                        DoBackFill(DateAdd(DateInterval.Day, -1, Now))
+                    Else
+                        DoBackFill(Now)
+                    End If
+                End If
+            ElseIf My.Settings.PVSendForecast Then
+                SendForecast()
+            End If
+        End If
+        If PendingModeChange Then
+            GetObservationAndStore()
+            GetPWMode()
+            'Math.Abs(PWIntendedMode.backup_reserve_percent - CurrentChargeSettings.backup_reserve_percent) > 5
+            If PWIntendedMode.real_mode <> CurrentChargeSettings.real_mode Or PWStatus <> PWIntededStatus Then
+                Dim Intent As String = "Set Mode"
+                SetPWMode("Repeating last attempt:", "Enter", IIf(PWIntendedMode.real_mode = self_consumption, "Self Consumption", "Backup").ToString, PWIntendedMode.backup_reserve_percent, PWIntendedMode.real_mode, Intent)
+            Else
+                PendingModeChange = False
+            End If
+        End If
+    End Sub
+    Protected Async Sub OnTenMinuteTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
         Await Task.Run(Sub()
                            CheckSOCLevel()
                        End Sub)
@@ -111,24 +137,24 @@ Public Class PowerwallService
     Protected Overrides Sub OnStart(ByVal args() As String)
         EventLog.WriteEntry("Powerwall Service Starting", EventLogEntryType.Information, 100)
 
-        ObservationTimer.Interval = 6 * 1000 ' Every Six Seconds
-        ObservationTimer.AutoReset = True
-        AddHandler ObservationTimer.Elapsed, AddressOf OnObservationTimer
+        SixSecondTimer.Interval = 6 * 1000 ' Every Six Seconds
+        SixSecondTimer.AutoReset = True
+        AddHandler SixSecondTimer.Elapsed, AddressOf OnSixSecondTimer
 
         OneMinuteTime.Interval = 60 * 1000 ' Every Minute
         OneMinuteTime.AutoReset = True
         AddHandler OneMinuteTime.Elapsed, AddressOf OnOneMinuteTime
 
         If My.Settings.PVReportingEnabled Then
-            ReportingTimer.Interval = 5 * 60 * 1000 ' Every Five Minutes
-            ReportingTimer.AutoReset = True
-            AddHandler ReportingTimer.Elapsed, AddressOf OnReportingTimer
+            FiveMinuteTimer.Interval = 5 * 60 * 1000 ' Every Five Minutes
+            FiveMinuteTimer.AutoReset = True
+            AddHandler FiveMinuteTimer.Elapsed, AddressOf OnFiveMinuteTimer
         End If
 
         If My.Settings.PWControlEnabled Then
-            ForecastTimer.Interval = 60 * 10 * 1000 ' Every 10 Minutes
-            ForecastTimer.AutoReset = True
-            AddHandler ForecastTimer.Elapsed, AddressOf OnForecastTimer
+            TenMinuteTimer.Interval = 60 * 10 * 1000 ' Every 10 Minutes
+            TenMinuteTimer.AutoReset = True
+            AddHandler TenMinuteTimer.Elapsed, AddressOf OnTenMinuteTimer
         End If
 
         Task.Run(Sub()
@@ -138,30 +164,34 @@ Public Class PowerwallService
         EventLog.WriteEntry("Powerwall Service Started", EventLogEntryType.Information, 101)
     End Sub
     Private Sub DoAsyncStartupProcesses()
-        If My.Settings.PWForceModeOnStartup Then
-            Dim RunningResult As Integer
-            Try
-                Dim ChargeSettings As New Operation With {.backup_reserve_percent = My.Settings.PWForceBackupPercentage, .real_mode = My.Settings.PWForceMode}
-                Dim APIResult As Integer
-                Dim NewChargeSettings As Operation = DoSetPWModeAPICalls(RunningResult, ChargeSettings, APIResult)
-                If APIResult = 202 Or APIResult = 200 Then
-                    EventLog.WriteEntry(String.Format("Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Information, 600)
-                Else
-                    EventLog.WriteEntry(String.Format("Failed to Set PW Mode: Mode={0}, BackupPercentage={1}, APIResult = {2}", NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult), EventLogEntryType.Warning, 601)
-                End If
-            Catch ex As Exception
-                SyncLock PWLock
-                    RunningResult = GetPWRunning()
-                End SyncLock
-            End Try
-        End If
         SetOffPeakHours(Now)
-        GetForecasts()
+        PWToken = LoginPWLocal(ForceReLogin:=True)
         GetPWMode()
+        If My.Settings.PWForceModeOnStartup Then
+            Dim Intent As String = "Thinking"
+            If My.Settings.PWForceMode = backup Then
+                If CurrentChargeSettings.backup_reserve_percent = 100 Then
+                    PWIntededStatus = PWStatusEnum.Standby
+                Else
+                    PWIntededStatus = PWStatusEnum.Charging
+                End If
+            Else
+                PWIntededStatus = PWStatusEnum.Discharging
+            End If
+            Dim APIResult As Integer = SetPWMode("Execute Force Startup Mode", "Enter", IIf(My.Settings.PWForceMode.ToString = self_consumption, "Self Consumption", "Backup").ToString, My.Settings.PWForceBackupPercentage, My.Settings.PWForceMode, Intent)
+            If APIResult = 202 Then
+                EventLog.WriteEntry(String.Format("Forced PW Mode on Startup to: Mode={0}, BackupPercentage={1}, APIResult = {2}", My.Settings.PWForceMode, My.Settings.PWForceBackupPercentage, APIResult), EventLogEntryType.Information, 800)
+            Else
+                EventLog.WriteEntry(String.Format("Failed to Force PW Mode on Startup: Mode={0}, BackupPercentage={1}, APIResult = {2}", My.Settings.PWForceMode, My.Settings.PWForceBackupPercentage, APIResult), EventLogEntryType.Warning, 801)
+            End If
+        End If
+
+        GetForecasts()
+
         Task.Run(Sub()
                      SleepUntilSecBoundary(6)
-                     ObservationTimer.Start()
-                     EventLog.WriteEntry("Observation Timer Started", EventLogEntryType.Information, 108)
+                     SixSecondTimer.Start()
+                     EventLog.WriteEntry("Six Second (Observation) Timer Started", EventLogEntryType.Information, 108)
                  End Sub)
 
         Task.Run(Sub()
@@ -173,7 +203,7 @@ Public Class PowerwallService
     End Sub
     Protected Overrides Sub OnContinue()
         EventLog.WriteEntry("Powerwall Service Resuming", EventLogEntryType.Information, 102)
-        ObservationTimer.Start()
+        SixSecondTimer.Start()
         OneMinuteTime.Start()
         Task.Run(Sub()
                      DebugTask()
@@ -183,24 +213,24 @@ Public Class PowerwallService
     End Sub
     Protected Overrides Sub OnPause()
         EventLog.WriteEntry("Powerwall Service Pausing", EventLogEntryType.Information, 104)
-        ObservationTimer.Stop()
+        SixSecondTimer.Stop()
         OneMinuteTime.Stop()
-        If My.Settings.PVReportingEnabled Then ReportingTimer.Stop()
-        If My.Settings.PWControlEnabled Then ForecastTimer.Stop()
+        If My.Settings.PVReportingEnabled Then FiveMinuteTimer.Stop()
+        If My.Settings.PWControlEnabled Then TenMinuteTimer.Stop()
         EventLog.WriteEntry("Powerwall Service Paused", EventLogEntryType.Information, 105)
     End Sub
     Protected Overrides Sub OnStop()
         EventLog.WriteEntry("Powerwall Service Stopping", EventLogEntryType.Information, 106)
-        ObservationTimer.Stop()
-        ObservationTimer.Dispose()
+        SixSecondTimer.Stop()
+        SixSecondTimer.Dispose()
         OneMinuteTime.Stop()
         OneMinuteTime.Dispose()
         If My.Settings.PVReportingEnabled Then
-            ReportingTimer.Stop()
-            ReportingTimer.Dispose()
+            FiveMinuteTimer.Stop()
+            FiveMinuteTimer.Dispose()
         End If
-        ForecastTimer.Stop()
-        ForecastTimer.Dispose()
+        TenMinuteTimer.Stop()
+        TenMinuteTimer.Dispose()
         EventLog.WriteEntry("Powerwall Service Stopped", EventLogEntryType.Information, 107)
     End Sub
 #End Region
@@ -291,18 +321,18 @@ Public Class PowerwallService
         Dim Minute As Integer = Now.Minute
         If Minute Mod 10 = 6 Or Minute Mod 10 = 1 Then
             If My.Settings.PVReportingEnabled Then
-                If ReportingTimer.Enabled = False Then
-                    ReportingTimer.Start()
-                    EventLog.WriteEntry("PVOutput Timer Started", EventLogEntryType.Information, 110)
+                If FiveMinuteTimer.Enabled = False Then
+                    FiveMinuteTimer.Start()
+                    EventLog.WriteEntry("Five Minute (PVOutput & Mode Check) Timer Started", EventLogEntryType.Information, 110)
                     SendPowerwallData(Now)
                 End If
             End If
         End If
         If Minute Mod 10 = 1 Then
             If My.Settings.PWControlEnabled Then
-                If ForecastTimer.Enabled = False Then
-                    ForecastTimer.Start()
-                    EventLog.WriteEntry("Solar Forecast and Charge Monitoring Timer Started", EventLogEntryType.Information, 111)
+                If TenMinuteTimer.Enabled = False Then
+                    TenMinuteTimer.Start()
+                    EventLog.WriteEntry("Ten Minute (Solar Forecast & Charge Monitoring) Timer Started", EventLogEntryType.Information, 111)
                     CheckSOCLevel()
                 End If
             End If
@@ -316,8 +346,7 @@ Public Class PowerwallService
             Try
                 response = CType(request.GetResponse(), HttpWebResponse)
             Catch ex As WebException
-                Dim resp As HttpWebResponse = CType(ex.Response, HttpWebResponse)
-                If resp.StatusCode <> 502 Then
+                If ex.Status <> 502 Then
                     EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
                 End If
                 Return Nothing
@@ -432,33 +461,39 @@ Public Class PowerwallService
                 If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Minimum required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 500)
                 If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OffPeakStart, PeakStart), EventLogEntryType.Information, 714)
                 If NextDayAllDayOffPeak And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                    If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                    PWIntededStatus = PWStatusEnum.Standby
+                    If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, self_consumption, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
                 ElseIf My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                    If SetPWMode("Current SOC above required morning SOC, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                    PWIntededStatus = PWStatusEnum.Standby
+                    If SetPWMode("Current SOC above required morning SOC, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, self_consumption, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
                 ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And CurrentDayAllOffPeak And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                    If SetPWMode("Current SOC above weekend target, standby on target enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                    PWIntededStatus = PWStatusEnum.Standby
+                    If SetPWMode("Current SOC above weekend target, standby on target enabled", "Enter", "Standby", SOC.percentage, self_consumption, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
                 ElseIf (SOC.percentage < StandbyTargetSOC And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (SOC.percentage < NoStandbyTargetSOC And Not OnStandby And Not PreCharging) Then
+                    PWIntededStatus = PWStatusEnum.Charging
                     If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 501)
-                    If SetPWMode("Current SOC below required morning SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
+                    If SetPWMode("Current SOC below required morning SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", self_consumption).ToString, Intent) = 202 Then
                         PreCharging = True
                         OnStandby = False
                     End If
                 ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby And My.Settings.PWOvernightStandby Then
+                    PWIntededStatus = PWStatusEnum.Standby
                     EventLog.WriteEntry(String.Format("Current SOC above required setting and Standby Mode Enabled: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 505)
-                    If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, "self_consumption", Intent) = 202 Then
+                    If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, self_consumption, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
                 ElseIf (LastTarget < NewTarget And OnStandby And Not CurrentDayAllOffPeak And Not NextDayAllDayOffPeak) Or (LastTarget < NewTarget And PreCharging) Then
+                    PWIntededStatus = PWStatusEnum.Charging
                     If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
                     If SetPWMode("Current SOC below required morning SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, "backup", "self_consumption").ToString, Intent) = 202 Then
                         PreCharging = True
@@ -494,9 +529,11 @@ Public Class PowerwallService
                 NextDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 1, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
                 SecondDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 2, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
                 ForecastsRetrieved = InvokedTime
-                NewForecastsRetrieved = True
+                If Not PVForecast Is Nothing Then
+                    NewForecastsRetrieved = True
+                End If
             End If
-            If My.Settings.PVSendForecast Then
+            If My.Settings.PVSendForecast And NewForecastsRetrieved Then
                 If LastPeriodForecast Is Nothing Then
                     LastPeriodForecast = New Forecast With {.period = PVForecast.forecasts(0).period, .period_end = PVForecast.forecasts(0).period_end, .pv_estimate = PVForecast.forecasts(0).pv_estimate}
                     CurrentPeriodForecast = New Forecast With {.period = PVForecast.forecasts(1).period, .period_end = PVForecast.forecasts(1).period_end, .pv_estimate = PVForecast.forecasts(1).pv_estimate}
@@ -658,6 +695,14 @@ Public Class PowerwallService
                     End If
                     If Not MeterReading Is Nothing Then
                         ObservationTime = MeterReading.site.last_communication_time
+                        Select Case MeterReading.battery.instant_apparent_power
+                            Case < -25
+                                PWStatus = PWStatusEnum.Charging
+                            Case > 25
+                                PWStatus = PWStatusEnum.Discharging
+                            Case Else
+                                PWStatus = PWStatusEnum.Standby
+                        End Select
                     End If
                     SkipObservation = False
                 Catch Ex As Exception
@@ -727,6 +772,11 @@ Public Class PowerwallService
         If Target > 100 Then Target = 100
         If Target < 5 Then Target = 5
         LastTarget = CInt(Target)
+        With PWIntendedMode
+            .backup_reserve_percent = LastTarget
+            .real_mode = Mode
+        End With
+        PendingModeChange = True
         Try
             If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format(ActionMessage & " Current SOC={0}, Current Target={1}", SOC.percentage, Target), EventLogEntryType.Information, 511)
             Intent = ActionType
@@ -754,7 +804,7 @@ Public Class PowerwallService
     Private Function DoSetPWModeAPICalls(ByRef RunningResult As Integer, ChargeSettings As Operation, ByRef APIResult As Integer) As Operation
         Dim NewChargeSettings As Operation
         SyncLock PWLock
-            NewChargeSettings = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings, ForceReLogin:=True)
+            NewChargeSettings = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings)
             Threading.Thread.Sleep(2000)
             APIResult = GetPWSecure("config/completed")
             Threading.Thread.Sleep(2000)
@@ -779,9 +829,8 @@ Public Class PowerwallService
         Try
             If Not PreCharging Then
                 Dim APIResult As Integer
-                Dim CurrentChargeSettings As Operation
                 SyncLock PWLock
-                    CurrentChargeSettings = GetPWSecureAPIResult(Of Operation)("operation", ForceReLogin:=True)
+                    CurrentChargeSettings = GetPWSecureAPIResult(Of Operation)("operation")
                     APIResult = GetPWSecure("config/completed")
                     RunningResult = GetPWRunning()
                 End SyncLock
@@ -803,7 +852,17 @@ Public Class PowerwallService
             PWToken = LoginPWLocal(ForceReLogin:=ForceReLogin)
             Dim request As WebRequest = WebRequest.Create(My.Settings.PWGatewayAddress & "/api/" & API)
             request.Headers.Add("Authorization", "Bearer " & PWToken)
-            Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
+            Dim response As HttpWebResponse
+            Try
+                response = CType(request.GetResponse(), HttpWebResponse)
+            Catch WebEx As WebException
+                If WebEx.Status = 401 Or WebEx.Status = 403 Then
+                    PWToken = LoginPWLocal(ForceReLogin:=True)
+                    response = CType(request.GetResponse(), HttpWebResponse)
+                Else
+                    Throw New Exception With {.Source = WebEx.Source}
+                End If
+            End Try
             Dim dataStream As Stream = response.GetResponseStream()
             Dim reader As StreamReader = New StreamReader(dataStream)
             Dim responseFromServer As String = reader.ReadToEnd()
@@ -819,7 +878,17 @@ Public Class PowerwallService
             PWToken = LoginPWLocal(ForceReLogin:=ForceReLogin)
             Dim request As WebRequest = GetPWRequest(API)
             request.Headers.Add("Authorization", "Bearer " & PWToken)
-            Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
+            Dim response As HttpWebResponse
+            Try
+                response = CType(request.GetResponse(), HttpWebResponse)
+            Catch WebEx As WebException
+                If WebEx.Status = 401 Or WebEx.Status = 403 Then
+                    PWToken = LoginPWLocal(ForceReLogin:=True)
+                    response = CType(request.GetResponse(), HttpWebResponse)
+                Else
+                    Throw New Exception With {.Source = WebEx.Source}
+                End If
+            End Try
             Dim dataStream As Stream = response.GetResponseStream()
             Dim reader As StreamReader = New StreamReader(dataStream)
             Dim responseFromServer As String = reader.ReadToEnd()
@@ -844,15 +913,25 @@ Public Class PowerwallService
             Dim BodyStream As Stream = request.GetRequestStream()
             BodyStream.Write(BodyByteStream, 0, BodyByteStream.Length)
             BodyStream.Close()
-            Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
+            Dim response As HttpWebResponse
+            Try
+                response = CType(request.GetResponse(), HttpWebResponse)
+            Catch WebEx As WebException
+                If WebEx.Status = 401 Or WebEx.Status = 403 Then
+                    PWToken = LoginPWLocal(ForceReLogin:=True)
+                    response = CType(request.GetResponse(), HttpWebResponse)
+                Else
+                    Throw New Exception With {.Source = WebEx.Source}
+                End If
+            End Try
             Dim dataStream As Stream = response.GetResponseStream()
             Dim reader As StreamReader = New StreamReader(dataStream)
             Dim responseFromServer As String = reader.ReadToEnd()
             PostPWSecureAPISettings = JsonConvert.DeserializeObject(Of JSONType)(responseFromServer)
             reader.Close()
             response.Close()
-        Catch Ex As Exception
-            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+            Catch Ex As Exception
+                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
         End Try
     End Function
     Function LoginPWLocal(Optional ForceReLogin As Boolean = False) As String
@@ -883,12 +962,15 @@ Public Class PowerwallService
                 response.Close()
             Catch ex As Exception
                 EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
+            Finally
+                GetPWRunning()
             End Try
         End If
         Return PWToken
     End Function
     Private Sub DoExitCharging(ByRef Intent As String)
-        If SetPWMode("Exit Charge or Standby Mode", "Enter", "Self Consumption", My.Settings.PWMinBackupPercentage, "self_consumption", Intent) = 202 Then
+        PWIntededStatus = PWStatusEnum.Discharging
+        If SetPWMode("Exit Charge or Standby Mode", "Enter", "Self Consumption", My.Settings.PWMinBackupPercentage, self_consumption, Intent) = 202 Then
             PreCharging = False
             OnStandby = False
             AboveMinBackup = False
