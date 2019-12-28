@@ -89,33 +89,6 @@ Public Class PowerwallService
                            DoFiveMinuteTasks()
                        End Sub)
     End Sub
-    Private Sub DoFiveMinuteTasks()
-        If My.Settings.PVReportingEnabled Then
-            If My.Settings.PVSendPowerwall Then
-                SendPowerwallData(Now)
-                If Now.Minute < 6 Then
-                    If Now.Hour = 0 Then
-                        DoBackFill(DateAdd(DateInterval.Day, -1, Now))
-                    Else
-                        DoBackFill(Now)
-                    End If
-                End If
-            ElseIf My.Settings.PVSendForecast Then
-                SendForecast()
-            End If
-        End If
-        If PendingModeChange Then
-            GetObservationAndStore()
-            GetPWMode()
-            'Math.Abs(PWIntendedMode.backup_reserve_percent - CurrentChargeSettings.backup_reserve_percent) > 5
-            If PWIntendedMode.real_mode <> CurrentChargeSettings.real_mode Or PWStatus <> PWIntededStatus Then
-                Dim Intent As String = "Set Mode"
-                SetPWMode("Repeating last attempt:", "Enter", IIf(PWIntendedMode.real_mode = self_consumption, "Self Consumption", "Backup").ToString, PWIntendedMode.backup_reserve_percent, PWIntendedMode.real_mode, Intent)
-            Else
-                PendingModeChange = False
-            End If
-        End If
-    End Sub
     Protected Async Sub OnTenMinuteTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
         Await Task.Run(Sub()
                            CheckSOCLevel()
@@ -273,7 +246,7 @@ Public Class PowerwallService
             OffPeakStartHour = My.Settings.TariffPeakEndWeekday
             PeakStartHour = My.Settings.TariffPeakStartWeekday
         End If
-        If My.Settings.TariffIgnoresDST And TZI.IsDaylightSavingTime(InvokedTime) Then
+        If My.Settings.TariffIgnoresDST And TZI.IsDaylightSavingTime(InvokedTime) And Not CurrentDayAllOffPeak Then
             OffPeakStartHour += CByte(1)
             If OffPeakStartHour > 23 Then OffPeakStartHour -= CByte(24)
             PeakStartHour += CByte(1)
@@ -316,6 +289,34 @@ Public Class PowerwallService
             End With
         End If
         If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Start: {0:yyyy-MM-dd HH:mm} End: {1:yyyy-MM-dd HH:mm}", OffPeakStart, PeakStart), EventLogEntryType.Information, 713)
+    End Sub
+    Private Sub DoFiveMinuteTasks()
+        If My.Settings.PVReportingEnabled Then
+            If My.Settings.PVSendPowerwall Then
+                SendPowerwallData(Now)
+                If Now.Minute < 6 Then
+                    If Now.Hour = 0 Then
+                        DoBackFill(DateAdd(DateInterval.Day, -1, Now))
+                    Else
+                        DoBackFill(Now)
+                    End If
+                End If
+            ElseIf My.Settings.PVSendForecast Then
+                SendForecast()
+            End If
+        End If
+        If PendingModeChange Then
+            GetObservationAndStore()
+            GetPWMode()
+            'Math.Abs(PWIntendedMode.backup_reserve_percent - CurrentChargeSettings.backup_reserve_percent) > 5
+            If PWIntendedMode.real_mode <> CurrentChargeSettings.real_mode Or PWStatus <> PWIntededStatus Then
+                Dim Intent As String = "Set Mode"
+                SetPWMode("Repeating last attempt:", "Enter", IIf(PWIntendedMode.real_mode = self_consumption, "Self Consumption", "Backup").ToString, PWIntendedMode.backup_reserve_percent, PWIntendedMode.real_mode, Intent)
+                PendingModeChange = False
+            Else
+                PendingModeChange = False
+            End If
+        End If
     End Sub
     Sub DoPerMinuteTasks()
         Dim Minute As Integer = Now.Minute
@@ -695,7 +696,7 @@ Public Class PowerwallService
                     End If
                     If Not MeterReading Is Nothing Then
                         ObservationTime = MeterReading.site.last_communication_time
-                        Select Case MeterReading.battery.instant_apparent_power
+                        Select Case MeterReading.battery.instant_power
                             Case < -25
                                 PWStatus = PWStatusEnum.Charging
                             Case > 25
