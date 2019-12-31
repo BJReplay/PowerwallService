@@ -72,6 +72,7 @@ Public Class PowerwallService
     Shared PWIntendedMode As New Operation With {.real_mode = self_consumption, .backup_reserve_percent = 0}
     Shared CurrentChargeSettings As Operation
     Shared PendingModeChange As Boolean = False
+    Shared PendingChangeRetryArmed As Boolean = False
 #End Region
 #Region "Timer Handlers"
     Protected Async Sub OnSixSecondTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
@@ -305,18 +306,6 @@ Public Class PowerwallService
                 SendForecast()
             End If
         End If
-        If PendingModeChange Then
-            GetObservationAndStore()
-            GetPWMode()
-            'Math.Abs(PWIntendedMode.backup_reserve_percent - CurrentChargeSettings.backup_reserve_percent) > 5
-            If PWIntendedMode.real_mode <> CurrentChargeSettings.real_mode Or PWStatus <> PWIntededStatus Then
-                Dim Intent As String = "Set Mode"
-                SetPWMode("Repeating last attempt:", "Enter", IIf(PWIntendedMode.real_mode = self_consumption, "Self Consumption", "Backup").ToString, PWIntendedMode.backup_reserve_percent, PWIntendedMode.real_mode, Intent)
-                PendingModeChange = False
-            Else
-                PendingModeChange = False
-            End If
-        End If
     End Sub
     Sub DoPerMinuteTasks()
         Dim Minute As Integer = Now.Minute
@@ -339,6 +328,21 @@ Public Class PowerwallService
             End If
         End If
         AggregateToMinute()
+        If PendingModeChange Then
+            If PendingChangeRetryArmed Then
+                GetObservationAndStore()
+                GetPWMode()
+                'Math.Abs(PWIntendedMode.backup_reserve_percent - CurrentChargeSettings.backup_reserve_percent) > 5
+                If PWIntendedMode.real_mode <> CurrentChargeSettings.real_mode Or PWStatus <> PWIntededStatus Then
+                    Dim Intent As String = "Set Mode"
+                    SetPWMode("Repeating last attempt:", "Enter", IIf(PWIntendedMode.real_mode = self_consumption, "Self Consumption", "Backup").ToString, PWIntendedMode.backup_reserve_percent, PWIntendedMode.real_mode, Intent)
+                End If
+                PendingModeChange = False
+                PendingChangeRetryArmed = False
+            Else
+                PendingChangeRetryArmed = True
+            End If
+        End If
     End Sub
     Function GetUnsecuredJSONResult(Of JSONType)(URL As String) As JSONType
         Dim response As HttpWebResponse
@@ -767,9 +771,9 @@ Public Class PowerwallService
     Private Function SetPWMode(ActionMessage As String, ActionMode As String, ActionType As String, Target As Double, Mode As String, ByRef Intent As String) As Integer
         Dim RunningResult As Integer
         SkipObservation = True
-        If Target > My.Settings.PWMinBackupPercentage Then
-            Target = Math.Round(Target) + 2
-        End If
+        'If Target > My.Settings.PWMinBackupPercentage Then
+        '    Target = Math.Round(Target) + 2
+        'End If
         If Target > 100 Then Target = 100
         If Target < 5 Then Target = 5
         LastTarget = CInt(Target)
@@ -857,11 +861,15 @@ Public Class PowerwallService
             Try
                 response = CType(request.GetResponse(), HttpWebResponse)
             Catch WebEx As WebException
-                If WebEx.Status = 401 Or WebEx.Status = 403 Then
+                Dim ExResponseCode As HttpStatusCode = CType(WebEx.Response, HttpWebResponse).StatusCode
+                If ExResponseCode = 401 Or ExResponseCode = 403 Then
                     PWToken = LoginPWLocal(ForceReLogin:=True)
+                    request.Headers.Set("Authorization", "Bearer " & PWToken)
                     response = CType(request.GetResponse(), HttpWebResponse)
                 Else
-                    Throw New Exception With {.Source = WebEx.Source}
+                    EventLog.WriteEntry(String.Format("Unexpected error calling API {0} with response status code: {1}", API, ExResponseCode), EventLogEntryType.Error, 902)
+                    EventLog.WriteEntry(WebEx.Message & vbCrLf & vbCrLf & WebEx.StackTrace, EventLogEntryType.Error)
+                    Throw WebEx
                 End If
             End Try
             Dim dataStream As Stream = response.GetResponseStream()
@@ -883,11 +891,15 @@ Public Class PowerwallService
             Try
                 response = CType(request.GetResponse(), HttpWebResponse)
             Catch WebEx As WebException
-                If WebEx.Status = 401 Or WebEx.Status = 403 Then
+                Dim ExResponseCode As HttpStatusCode = CType(WebEx.Response, HttpWebResponse).StatusCode
+                If ExResponseCode = 401 Or ExResponseCode = 403 Then
                     PWToken = LoginPWLocal(ForceReLogin:=True)
+                    request.Headers.Set("Authorization", "Bearer " & PWToken)
                     response = CType(request.GetResponse(), HttpWebResponse)
                 Else
-                    Throw New Exception With {.Source = WebEx.Source}
+                    EventLog.WriteEntry(String.Format("Unexpected error calling API {0} with response status code: {1}", API, ExResponseCode), EventLogEntryType.Error, 901)
+                    EventLog.WriteEntry(WebEx.Message & vbCrLf & vbCrLf & WebEx.StackTrace, EventLogEntryType.Error)
+                    Throw WebEx
                 End If
             End Try
             Dim dataStream As Stream = response.GetResponseStream()
@@ -918,11 +930,15 @@ Public Class PowerwallService
             Try
                 response = CType(request.GetResponse(), HttpWebResponse)
             Catch WebEx As WebException
-                If WebEx.Status = 401 Or WebEx.Status = 403 Then
+                Dim ExResponseCode As HttpStatusCode = CType(WebEx.Response, HttpWebResponse).StatusCode
+                If ExResponseCode = 401 Or ExResponseCode = 403 Then
                     PWToken = LoginPWLocal(ForceReLogin:=True)
+                    request.Headers.Set("Authorization", "Bearer " & PWToken)
                     response = CType(request.GetResponse(), HttpWebResponse)
                 Else
-                    Throw New Exception With {.Source = WebEx.Source}
+                    EventLog.WriteEntry(String.Format("Unexpected error calling API {0} with settings {1} with response status code: {2}", API, JsonConvert.SerializeObject(Settings).ToString, ExResponseCode), EventLogEntryType.Error, 900)
+                    EventLog.WriteEntry(WebEx.Message & vbCrLf & vbCrLf & WebEx.StackTrace, EventLogEntryType.Error)
+                    Throw WebEx
                 End If
             End Try
             Dim dataStream As Stream = response.GetResponseStream()
