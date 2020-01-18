@@ -419,24 +419,30 @@ Public Class PowerwallService
         Dim RemainingOffPeak As Single
         Dim Intent As String = "Thinking"
         Dim NewTarget As Single = 0
-        If InvokedTime > Sunrise And InvokedTime < Sunset Then
+        If InvokedTime > Sunrise And InvokedTime < PeakStart Then
+            RemainingOvernightRatio = 0
+            RemainingInsolationToday = CurrentDayForecast.PVEstimate
+            ForecastInsolationTomorrow = NextDayForecastGeneration
+            ShortfallInsolation = 0
+            Intent = "Sun is Up, Waiting for Peak"
+        ElseIf InvokedTime > Sunrise And InvokedTime < Sunset Then
             RemainingOvernightRatio = 1
             RemainingInsolationToday = CurrentDayForecast.PVEstimate
             ForecastInsolationTomorrow = NextDayForecastGeneration
             ShortfallInsolation = 0
-            Intent = "Sun is Up"
+            Intent = "Sun is Up, In Peak"
         ElseIf InvokedTime > PeakStart And InvokedTime < Sunrise Then
             RemainingOvernightRatio = 0
             RemainingInsolationToday = CurrentDayForecast.PVEstimate
             ForecastInsolationTomorrow = NextDayForecastGeneration
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
-            Intent = "Waiting for Sunrise"
+            Intent = "Waiting for Sunrise, In Peak"
         ElseIf InvokedTime > Sunset And InvokedTime < OffPeakStart Then
             RemainingOvernightRatio = 1
             RemainingInsolationToday = 0
             ForecastInsolationTomorrow = NextDayForecastGeneration
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
-            Intent = "Waiting for Off Peak"
+            Intent = "Sun is Down, Waiting for Off Peak"
         ElseIf InvokedTime > OffPeakStart And InvokedTime < PeakStart Then
             RemainingOvernightRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, PeakStart) + 1) / OffPeakHours)
             If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
