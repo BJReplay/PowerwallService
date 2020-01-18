@@ -135,7 +135,7 @@ Public Class PowerwallService
                      DoAsyncStartupProcesses()
                  End Sub)
 
-        EventLog.WriteEntry("Powerwall Service Started", EventLogEntryType.Information, 101)
+        EventLog.WriteEntry(String.Format("Powerwall Service version {0} started", My.Application.Info.Version.ToString), EventLogEntryType.Information, 101)
     End Sub
     Private Sub DoAsyncStartupProcesses()
         SetOffPeakHours(Now)
