@@ -531,14 +531,14 @@ Public Class PowerwallService
         End If
     End Sub
     Sub GetForecasts()
+        Dim InvokedTime As DateTime = Now
         Try
             Dim NewForecastsRetrieved As Boolean = False
-            Dim InvokedTime As DateTime = Now
             If DateAdd(DateInterval.Hour, 1, ForecastsRetrieved) < InvokedTime And InvokedTime.Hour < Sunset.Hour Then
-                PVForecast = GetSolCastResult(Of OutputForecast)()
                 CurrentDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 0, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
                 NextDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 1, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
                 SecondDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 2, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
+                PVForecast = GetSolCastResult(Of OutputForecast)()
                 ForecastsRetrieved = InvokedTime
                 If Not PVForecast Is Nothing Then
                     NewForecastsRetrieved = True
@@ -583,6 +583,9 @@ Public Class PowerwallService
                 End With
                 EventLog.WriteEntry(ForecastLogEntry, EventLogEntryType.Information, 1000)
             End If
+        Catch Ex As Exception
+            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+        Finally
             If InvokedTime.Hour >= 0 And InvokedTime.Hour < PeakStartHour Then
                 With CurrentDayForecast
                     NextDayForecastGeneration = .PVEstimate
@@ -594,8 +597,6 @@ Public Class PowerwallService
                     NextDayMorningGeneration = .MorningForecast
                 End With
             End If
-        Catch Ex As Exception
-            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
         End Try
     End Sub
     Private Sub SendForecast()
