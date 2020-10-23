@@ -36,7 +36,7 @@ Public Class PowerwallService
     Shared NextDayForecastGeneration As Single = 0
     Shared NextDayMorningGeneration As Single = 0
     Shared MeterReading As MeterAggregates
-    Shared SOC As SOC
+    Shared SOC As New SOC With {.percentage = 5}
     Shared CurrentDayForecast As DayForecast
     Shared NextDayForecast As DayForecast
     Shared SecondDayForecast As DayForecast
@@ -70,9 +70,11 @@ Public Class PowerwallService
     Shared PWStatus As PWStatusEnum = PWStatusEnum.Standby
     Shared PWIntededStatus As PWStatusEnum = PWStatusEnum.Standby
     Shared PWIntendedMode As New Operation With {.real_mode = self_consumption, .backup_reserve_percent = 0}
-    Shared CurrentChargeSettings As Operation
+    Shared CurrentChargeSettings As New Operation With {.real_mode = self_consumption, .backup_reserve_percent = 0}
     Shared PendingModeChange As Boolean = False
     Shared PendingChangeRetryArmed As Boolean = False
+    Shared PWEnergyID As Integer
+    Shared PWSiteID As String
 #End Region
 #Region "Timer Handlers"
     Protected Async Sub OnSixSecondTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
@@ -97,7 +99,7 @@ Public Class PowerwallService
     End Sub
     Protected Async Sub DebugTask()
         Await Task.Run(Sub()
-                           If My.Settings.PWControlEnabled Then CheckSOCLevel()
+                           DoAsyncStartupProcesses()
                        End Sub)
     End Sub
 #End Region
@@ -138,9 +140,11 @@ Public Class PowerwallService
         EventLog.WriteEntry(String.Format("Powerwall Service version {0} started", My.Application.Info.Version.ToString), EventLogEntryType.Information, 101)
     End Sub
     Private Sub DoAsyncStartupProcesses()
+        Threading.Thread.Sleep(10000)
         SetOffPeakHours(Now)
-        PWToken = LoginPWLocal(ForceReLogin:=True)
-        GetPWMode()
+        PWToken = LoginPWCloud(ForceReLogin:=True)
+        GetPublicProducts()
+        GetPublicPWMode()
         If My.Settings.PWForceModeOnStartup Then
             Dim Intent As String = "Thinking"
             If My.Settings.PWForceMode = backup Then
@@ -301,7 +305,7 @@ Public Class PowerwallService
             If My.Settings.PVSendPowerwall Then
                 SendPowerwallData(Now)
                 If Now.Minute < 6 Then
-                    If Now.Hour = 0 Then
+                    If Now.Hour < 3 Then
                         DoBackFill(DateAdd(DateInterval.Day, -1, Now))
                     Else
                         DoBackFill(Now)
@@ -336,7 +340,7 @@ Public Class PowerwallService
         If PendingModeChange Then
             If PendingChangeRetryArmed Then
                 GetObservationAndStore()
-                GetPWMode()
+                GetPublicPWMode()
                 'Math.Abs(PWIntendedMode.backup_reserve_percent - CurrentChargeSettings.backup_reserve_percent) > 5
                 If PWIntendedMode.real_mode <> CurrentChargeSettings.real_mode Or PWStatus <> PWIntededStatus Then
                     Dim Intent As String = "Set Mode"
@@ -787,7 +791,6 @@ Public Class PowerwallService
 #End Region
 #Region "Powerwall Control"
     Private Function SetPWMode(ActionMessage As String, ActionMode As String, ActionType As String, Target As Double, Mode As String, ByRef Intent As String) As Integer
-        Dim RunningResult As Integer
         SkipObservation = True
         'If Target > My.Settings.PWMinBackupPercentage Then
         '    Target = Math.Round(Target) + 2
@@ -804,38 +807,36 @@ Public Class PowerwallService
             If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format(ActionMessage & " Current SOC={0}, Current Target={1}", SOC.percentage, Target), EventLogEntryType.Information, 511)
             Intent = ActionType
             Dim ChargeSettings As New Operation With {.backup_reserve_percent = LastTarget, .real_mode = Mode}
-            Dim APIResult As Integer
-            Dim NewChargeSettings As Operation = DoSetPWModeAPICalls(RunningResult, ChargeSettings, APIResult)
+            Dim APIResult As Integer = DoSetPWModePublicAPICalls(ChargeSettings)
             If APIResult = 202 Or APIResult = 200 Then
-                EventLog.WriteEntry(String.Format("{5}ed {6} Mode: Current SOC={0}, Current Target={1}, Set Mode={2}, Set Backup Percentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Information, 512)
-                AboveMinBackup = (NewChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
+                EventLog.WriteEntry(String.Format("{5}ed {6} Mode: Current SOC={0}, Current Target={1}, Set Mode={2}, Set Backup Percentage={3}, APIResult = {4}", SOC.percentage, Target, ChargeSettings.real_mode, ChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Information, 512)
+                AboveMinBackup = (ChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
                 Intent = ActionType
                 SetPWMode = 202 ' Calls to SetPWMode expect APIResult of 202 as per behaviour for FW 1.42 and earlier
             Else
-                EventLog.WriteEntry(String.Format("Failed to {5} {6} Mode: Current SOC={0}, Attempted Target={1}, Mode={2}, BackupPercentage={3}, APIResult = {4}", SOC.percentage, Target, NewChargeSettings.real_mode, NewChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Warning, 513)
+                EventLog.WriteEntry(String.Format("Failed to {5} {6} Mode: Current SOC={0}, Attempted Target={1}, Mode={2}, BackupPercentage={3}, APIResult = {4}", SOC.percentage, Target, ChargeSettings.real_mode, ChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Warning, 513)
                 Intent = String.Format("Trying to {0} {1}", ActionMode, ActionType)
                 SetPWMode = APIResult
             End If
         Catch ex As Exception
-            SyncLock PWLock
-                RunningResult = GetPWRunning()
-            End SyncLock
             SetPWMode = 0
         End Try
         SkipObservation = False
     End Function
     Private Function DoSetPWModeAPICalls(ByRef RunningResult As Integer, ChargeSettings As Operation, ByRef APIResult As Integer) As Operation
-        Dim NewChargeSettings As Operation
-        SyncLock PWLock
-            NewChargeSettings = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings)
-            Threading.Thread.Sleep(2000)
-            APIResult = GetPWSecure("config/completed")
-            Threading.Thread.Sleep(2000)
-            RunningResult = GetPWRunning()
-        End SyncLock
-        DoSetPWModeAPICalls = NewChargeSettings
+        DoSetPWModeAPICalls = PostPWSecureAPISettings(Of Operation)("operation", ChargeSettings)
     End Function
-
+    Private Function DoSetPWModePublicAPICalls(ChargeSettings As Operation) As Integer
+        Dim BackupSetting As New PublicBackup With {.backup_reserve_percent = ChargeSettings.backup_reserve_percent}
+        Dim OperationSetting As New PublicOperation With {.default_real_mode = ChargeSettings.real_mode}
+        Dim ModeResponse As PublicAPIResponse = PostPWPublicAPISettings(Of PublicBackup)("energy_sites/" & PWEnergyID.ToString.Trim & "/backup", BackupSetting)
+        Dim PercentageResponse As PublicAPIResponse = PostPWPublicAPISettings(Of PublicOperation)("energy_sites/" & PWEnergyID.ToString.Trim & "/operation", OperationSetting)
+        If ModeResponse.response.code >= 200 And ModeResponse.response.code <= 202 And PercentageResponse.response.code >= 200 And PercentageResponse.response.code <= 202 Then
+            DoSetPWModePublicAPICalls = 202
+        Else
+            DoSetPWModePublicAPICalls = 500
+        End If
+    End Function
     Private Function GetPWRunning() As Integer
         GetPWRunning = GetPWSecure("sitemaster/run")
     End Function
@@ -845,6 +846,11 @@ Public Class PowerwallService
         wr.ServerCertificateValidationCallback = Function()
                                                      Return True
                                                  End Function
+        Return wr
+    End Function
+    Private Shared Function GetPublicPWRequest(API As String) As WebRequest
+        Dim wr As HttpWebRequest
+        wr = CType(WebRequest.Create(My.Settings.PWPublicAPI & API), HttpWebRequest)
         Return wr
     End Function
     Private Sub GetPWMode()
@@ -868,6 +874,31 @@ Public Class PowerwallService
             SyncLock PWLock
                 RunningResult = GetPWRunning()
             End SyncLock
+        End Try
+    End Sub
+    Private Sub GetPublicPWMode()
+        Dim SiteInfoResults As PublicSiteInfo
+        Try
+            If Not PreCharging Then
+                SiteInfoResults = GetPWPublicAPIResult(Of PublicSiteInfo)("energy_sites/" & PWEnergyID & "/site_info")
+                CurrentChargeSettings.real_mode = SiteInfoResults.response.default_real_mode
+                CurrentChargeSettings.backup_reserve_percent = SiteInfoResults.response.backup_reserve_percent
+                EventLog.WriteEntry(String.Format("Current PW Mode={0}, BackupPercentage={1}", CurrentChargeSettings.real_mode, CurrentChargeSettings.backup_reserve_percent), EventLogEntryType.Information, 602)
+                AboveMinBackup = (CurrentChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
+            End If
+        Catch ex As Exception
+            EventLog.WriteEntry(String.Format("Error Getting Current PW Mode: {0}, {1}", ex.Message, ex.StackTrace), EventLogEntryType.Warning, 1602)
+        End Try
+    End Sub
+    Private Sub GetPublicProducts()
+        Dim ListProductResult As ListProducts
+        Try
+            ListProductResult = GetPWPublicAPIResult(Of ListProducts)("products")
+            PWEnergyID = ListProductResult.response(0).energy_site_id
+            PWSiteID = ListProductResult.response(0).id
+            EventLog.WriteEntry(String.Format("Site ID={0}, Powerwall ID={1}", PWEnergyID, PWSiteID), EventLogEntryType.Information, 603)
+        Catch ex As Exception
+            EventLog.WriteEntry(String.Format("Error Getting Site ID: {0}, {1}", ex.Message, ex.StackTrace), EventLogEntryType.Warning, 1603)
         End Try
     End Sub
     Function GetPWSecureAPIResult(Of JSONType)(API As String, Optional ForceReLogin As Boolean = False) As JSONType
@@ -894,6 +925,36 @@ Public Class PowerwallService
             Dim reader As StreamReader = New StreamReader(dataStream)
             Dim responseFromServer As String = reader.ReadToEnd()
             GetPWSecureAPIResult = JsonConvert.DeserializeObject(Of JSONType)(responseFromServer)
+            reader.Close()
+            response.Close()
+        Catch Ex As Exception
+            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+        End Try
+    End Function
+    Function GetPWPublicAPIResult(Of JSONType)(API As String, Optional ForceReLogin As Boolean = False) As JSONType
+        Try
+            PWToken = LoginPWCloud(ForceReLogin:=ForceReLogin)
+            Dim request As WebRequest = WebRequest.Create(My.Settings.PWPublicAPI & "api/1/" & API)
+            request.Headers.Add("Authorization", "Bearer " & PWToken)
+            Dim response As HttpWebResponse
+            Try
+                response = CType(request.GetResponse(), HttpWebResponse)
+            Catch WebEx As WebException
+                Dim ExResponseCode As HttpStatusCode = CType(WebEx.Response, HttpWebResponse).StatusCode
+                If ExResponseCode = 401 Or ExResponseCode = 403 Then
+                    PWToken = LoginPWCloud(ForceReLogin:=True)
+                    request.Headers.Set("Authorization", "Bearer " & PWToken)
+                    response = CType(request.GetResponse(), HttpWebResponse)
+                Else
+                    EventLog.WriteEntry(String.Format("Unexpected error calling API {0} with response status code: {1}", API, ExResponseCode), EventLogEntryType.Error, 903)
+                    EventLog.WriteEntry(WebEx.Message & vbCrLf & vbCrLf & WebEx.StackTrace, EventLogEntryType.Error)
+                    Throw WebEx
+                End If
+            End Try
+            Dim dataStream As Stream = response.GetResponseStream()
+            Dim reader As StreamReader = New StreamReader(dataStream)
+            Dim responseFromServer As String = reader.ReadToEnd()
+            GetPWPublicAPIResult = JsonConvert.DeserializeObject(Of JSONType)(responseFromServer)
             reader.Close()
             response.Close()
         Catch Ex As Exception
@@ -965,8 +1026,50 @@ Public Class PowerwallService
             PostPWSecureAPISettings = JsonConvert.DeserializeObject(Of JSONType)(responseFromServer)
             reader.Close()
             response.Close()
-            Catch Ex As Exception
-                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+        Catch Ex As Exception
+            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+        End Try
+    End Function
+    Function PostPWPublicAPISettings(Of JSONType)(API As String, Settings As JSONType, Optional ForceReLogin As Boolean = False) As PublicAPIResponse
+        Try
+            PWToken = LoginPWCloud(ForceReLogin:=ForceReLogin)
+            Dim BodyPostData As String = JsonConvert.SerializeObject(Settings).ToString
+            Dim BodyByteStream As Byte() = Encoding.UTF8.GetBytes(BodyPostData)
+            Dim request As WebRequest = GetPublicPWRequest("api/1/" & API)
+            request.Headers.Add("Authorization", "Bearer " & PWToken)
+            request.Method = "POST"
+            request.ContentType = "application/json"
+            request.ContentLength = BodyByteStream.Length
+            Dim BodyStream As Stream = request.GetRequestStream()
+            BodyStream.Write(BodyByteStream, 0, BodyByteStream.Length)
+            BodyStream.Close()
+            Dim response As HttpWebResponse
+            Try
+                response = CType(request.GetResponse(), HttpWebResponse)
+            Catch WebEx As WebException
+                Dim ExResponseCode As HttpStatusCode = CType(WebEx.Response, HttpWebResponse).StatusCode
+                If ExResponseCode = 401 Or ExResponseCode = 403 Then
+                    PWToken = LoginPWCloud(ForceReLogin:=True)
+                    request.Headers.Set("Authorization", "Bearer " & PWToken)
+                    response = CType(request.GetResponse(), HttpWebResponse)
+                Else
+                    EventLog.WriteEntry(String.Format("Unexpected error calling API {0} with settings {1} with response status code: {2}", API, JsonConvert.SerializeObject(Settings).ToString, ExResponseCode), EventLogEntryType.Error, 904)
+                    EventLog.WriteEntry(WebEx.Message & vbCrLf & vbCrLf & WebEx.StackTrace, EventLogEntryType.Error)
+                    Throw WebEx
+                End If
+            End Try
+            Dim dataStream As Stream = response.GetResponseStream()
+            Dim reader As StreamReader = New StreamReader(dataStream)
+            Dim responseFromServer As String = reader.ReadToEnd()
+            PostPWPublicAPISettings = JsonConvert.DeserializeObject(Of PublicAPIResponse)(responseFromServer)
+            reader.Close()
+            response.Close()
+        Catch Ex As Exception
+            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+            Dim FunctionReturn As New PublicAPIResponse
+            FunctionReturn.response.code = 500
+            FunctionReturn.response.message = Ex.Message
+            PostPWPublicAPISettings = FunctionReturn
         End Try
     End Function
     Function LoginPWLocal(Optional ForceReLogin As Boolean = False) As String
@@ -999,6 +1102,36 @@ Public Class PowerwallService
                 EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
             Finally
                 GetPWRunning()
+            End Try
+        End If
+        Return PWToken
+    End Function
+    Function LoginPWCloud(Optional ForceReLogin As Boolean = False) As String
+        If PWToken = String.Empty Or ForceReLogin = True Then
+            Try
+                Dim LoginRequest As New PublicLoginRequest With {
+                    .email = My.Settings.PWPublicEmail,
+                    .password = My.Settings.PWPublicPassword
+                }
+                Dim BodyPostData As String = JsonConvert.SerializeObject(LoginRequest).ToString
+                Dim BodyByteStream As Byte() = Encoding.ASCII.GetBytes(BodyPostData)
+                Dim request As WebRequest = GetPublicPWRequest("oauth/token")
+                request.Method = "POST"
+                request.ContentType = "application/json"
+                request.ContentLength = BodyByteStream.Length
+                Dim BodyStream As Stream = request.GetRequestStream()
+                BodyStream.Write(BodyByteStream, 0, BodyByteStream.Length)
+                BodyStream.Close()
+                Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
+                Dim dataStream As Stream = response.GetResponseStream()
+                Dim reader As StreamReader = New StreamReader(dataStream)
+                Dim responseFromServer As String = reader.ReadToEnd()
+                Dim LoginResult As PublicLoginResponse = JsonConvert.DeserializeObject(Of PublicLoginResponse)(responseFromServer)
+                PWToken = LoginResult.access_token
+                reader.Close()
+                response.Close()
+            Catch ex As Exception
+                EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
             End Try
         End If
         Return PWToken
