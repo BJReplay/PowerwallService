@@ -160,7 +160,12 @@ Public Class PowerwallService
             End If
         End If
 
-        GetForecasts()
+        Try
+            GetForecasts()
+        Catch ex As Exception
+            EventLog.WriteEntry(String.Format("Failed to get forecasts: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 802)
+        End Try
+
 
         Task.Run(Sub()
                      SleepUntilSecBoundary(6)
@@ -533,15 +538,20 @@ Public Class PowerwallService
     Sub GetForecasts()
         Dim InvokedTime As DateTime = Now
         Try
-            Dim NewForecastsRetrieved As Boolean = False
-            If DateAdd(DateInterval.Hour, 1, ForecastsRetrieved) < InvokedTime And InvokedTime.Hour < Sunset.Hour Then
+            If CurrentDayForecast Is Nothing Then ' No Forecast retrieved - let's initialise with empty.
                 CurrentDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 0, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
                 NextDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 1, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
                 SecondDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 2, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
+            End If
+            Dim NewForecastsRetrieved As Boolean = False
+            If DateAdd(DateInterval.Hour, 1, ForecastsRetrieved) < InvokedTime And InvokedTime.Hour < Sunset.Hour Then
                 PVForecast = GetSolCastResult(Of OutputForecast)()
-                ForecastsRetrieved = InvokedTime
                 If Not PVForecast Is Nothing Then
+                    ForecastsRetrieved = InvokedTime
                     NewForecastsRetrieved = True
+                    CurrentDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 0, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
+                    NextDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 1, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
+                    SecondDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 2, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
                 End If
             End If
             If My.Settings.PVSendForecast And NewForecastsRetrieved Then
@@ -582,21 +592,22 @@ Public Class PowerwallService
                     ForecastLogEntry += vbCrLf & String.Format("Date: {0:yyyy-MM-dd} Total: {1} Morning: {2}", .ForecastDate, .PVEstimate, .MorningForecast)
                 End With
                 EventLog.WriteEntry(ForecastLogEntry, EventLogEntryType.Information, 1000)
+                If InvokedTime.Hour >= 0 And InvokedTime.Hour < PeakStartHour Then
+                    With CurrentDayForecast
+                        NextDayForecastGeneration = .PVEstimate
+                        NextDayMorningGeneration = .MorningForecast
+                    End With
+                Else
+                    With NextDayForecast
+                        NextDayForecastGeneration = .PVEstimate
+                        NextDayMorningGeneration = .MorningForecast
+                    End With
+                End If
             End If
         Catch Ex As Exception
             EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
-        Finally
-            If InvokedTime.Hour >= 0 And InvokedTime.Hour < PeakStartHour Then
-                With CurrentDayForecast
-                    NextDayForecastGeneration = .PVEstimate
-                    NextDayMorningGeneration = .MorningForecast
-                End With
-            Else
-                With NextDayForecast
-                    NextDayForecastGeneration = .PVEstimate
-                    NextDayMorningGeneration = .MorningForecast
-                End With
-            End If
+            NextDayForecastGeneration = 0
+            NextDayMorningGeneration = 0
         End Try
     End Sub
     Private Sub SendForecast()
