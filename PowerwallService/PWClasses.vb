@@ -165,7 +165,7 @@ Public Class PWJson
     End Class
 
     Public Class Products
-        Public Property energy_site_id As Integer
+        Public Property energy_site_id As Long
         Public Property resource_type As String
         Public Property site_name As String
         Public Property id As String

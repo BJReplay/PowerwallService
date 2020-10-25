@@ -73,7 +73,7 @@ Public Class PowerwallService
     Shared CurrentChargeSettings As New Operation With {.real_mode = self_consumption, .backup_reserve_percent = 0}
     Shared PendingModeChange As Boolean = False
     Shared PendingChangeRetryArmed As Boolean = False
-    Shared PWEnergyID As Integer
+    Shared PWEnergyID As Long
     Shared PWSiteID As String
 #End Region
 #Region "Timer Handlers"
@@ -892,9 +892,20 @@ Public Class PowerwallService
     End Sub
     Private Sub GetPublicProducts()
         Dim ListProductResult As ListProducts
+        Dim FoundEnergyID As Long
+        Dim ConfigEnergyID As Long = My.Settings.PWEnergySiteID
         Try
             ListProductResult = GetPWPublicAPIResult(Of ListProducts)("products")
-            PWEnergyID = ListProductResult.response(0).energy_site_id
+            FoundEnergyID = ListProductResult.response(0).energy_site_id
+            If ConfigEnergyID = 0 And FoundEnergyID <> 0 Then
+                PWEnergyID = FoundEnergyID
+            ElseIf ConfigEnergyID = FoundEnergyID And ConfigEnergyID <> 0 Then
+                PWEnergyID = FoundEnergyID
+            ElseIf ConfigEnergyID <> 0 Then
+                PWEnergyID = ConfigEnergyID
+            Else
+                PWEnergyID = FoundEnergyID
+            End If
             PWSiteID = ListProductResult.response(0).id
             EventLog.WriteEntry(String.Format("Site ID={0}, Powerwall ID={1}", PWEnergyID, PWSiteID), EventLogEntryType.Information, 603)
         Catch ex As Exception

@@ -217,5 +217,8 @@
     <Setting Name="PWPublicAPI" Type="System.String" Scope="Application">
       <Value Profile="(Default)">https://owner-api.teslamotors.com/</Value>
     </Setting>
+    <Setting Name="PWEnergySiteID" Type="System.Int64" Scope="Application">
+      <Value Profile="(Default)">0</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

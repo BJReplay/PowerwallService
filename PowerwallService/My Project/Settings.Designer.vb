@@ -673,6 +673,15 @@ Namespace My
                 Return CType(Me("PWPublicAPI"),String)
             End Get
         End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("0")>  _
+        Public ReadOnly Property PWEnergySiteID() As Long
+            Get
+                Return CType(Me("PWEnergySiteID"),Long)
+            End Get
+        End Property
     End Class
 End Namespace
 
