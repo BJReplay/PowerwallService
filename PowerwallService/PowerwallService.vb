@@ -94,14 +94,7 @@ Public Class PowerwallService
     End Sub
     Protected Async Sub OnTenMinuteTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
         Await Task.Run(Sub()
-                           SetOffPeakHours(Now)
-                           If Not FirstReadingsAvailable Then
-                               GetObservationAndStore()
-                           End If
-                           GetForecasts()
-                           If My.Settings.PWControlEnabled Then
-                               CheckSOCLevel()
-                           End If
+                           DoTenMinuteTasks()
                        End Sub)
     End Sub
     Protected Async Sub DebugTask()
@@ -305,22 +298,6 @@ Public Class PowerwallService
         End If
         If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Start: {0:yyyy-MM-dd HH:mm} End: {1:yyyy-MM-dd HH:mm}", OffPeakStart, PeakStart), EventLogEntryType.Information, 713)
     End Sub
-    Private Sub DoFiveMinuteTasks()
-        If My.Settings.PVReportingEnabled Then
-            If My.Settings.PVSendPowerwall Then
-                SendPowerwallData(Now)
-                If Now.Minute < 6 Then
-                    If Now.Hour < 3 Then
-                        DoBackFill(DateAdd(DateInterval.Day, -1, Now))
-                    Else
-                        DoBackFill(Now)
-                    End If
-                End If
-            ElseIf My.Settings.PVSendForecast Then
-                SendForecast()
-            End If
-        End If
-    End Sub
     Sub DoPerMinuteTasks()
         Dim Minute As Integer = Now.Minute
         If Minute Mod 10 = 6 Or Minute Mod 10 = 1 Then
@@ -356,6 +333,32 @@ Public Class PowerwallService
             End If
         End If
     End Sub
+    Private Sub DoFiveMinuteTasks()
+        If My.Settings.PVReportingEnabled Then
+            If My.Settings.PVSendPowerwall Then
+                SendPowerwallData(Now)
+                If Now.Minute < 6 Then
+                    If Now.Hour < 3 Then
+                        DoBackFill(DateAdd(DateInterval.Day, -1, Now))
+                    Else
+                        DoBackFill(Now)
+                    End If
+                End If
+            ElseIf My.Settings.PVSendForecast Then
+                SendForecast()
+            End If
+        End If
+    End Sub
+    Private Function DoTenMinuteTasks() As Task
+        SetOffPeakHours(Now)
+        If Not FirstReadingsAvailable Then
+            GetObservationAndStore()
+        End If
+        GetForecasts()
+        If My.Settings.PWControlEnabled Then
+            CheckSOCLevel()
+        End If
+    End Function
     Function GetUnsecuredJSONResult(Of JSONType)(URL As String) As JSONType
         Dim response As HttpWebResponse
         Try
@@ -415,11 +418,6 @@ Public Class PowerwallService
 #Region "Forecasts and Targets"
     Sub CheckSOCLevel()
         Dim InvokedTime As DateTime = Now
-        SetOffPeakHours(InvokedTime)
-        If Not FirstReadingsAvailable Then
-            GetObservationAndStore()
-        End If
-        GetForecasts()
         Dim RawTargetSOC As Integer
         Dim ShortfallInsolation As Single = 0
         Dim NoStandbyTargetSOC As Single = 0
