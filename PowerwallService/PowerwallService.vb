@@ -94,7 +94,14 @@ Public Class PowerwallService
     End Sub
     Protected Async Sub OnTenMinuteTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
         Await Task.Run(Sub()
-                           CheckSOCLevel()
+                           SetOffPeakHours(Now)
+                           If Not FirstReadingsAvailable Then
+                               GetObservationAndStore()
+                           End If
+                           GetForecasts()
+                           If My.Settings.PWControlEnabled Then
+                               CheckSOCLevel()
+                           End If
                        End Sub)
     End Sub
     Protected Async Sub DebugTask()
@@ -127,11 +134,9 @@ Public Class PowerwallService
             AddHandler FiveMinuteTimer.Elapsed, AddressOf OnFiveMinuteTimer
         End If
 
-        If My.Settings.PWControlEnabled Then
-            TenMinuteTimer.Interval = 60 * 10 * 1000 ' Every 10 Minutes
-            TenMinuteTimer.AutoReset = True
-            AddHandler TenMinuteTimer.Elapsed, AddressOf OnTenMinuteTimer
-        End If
+        TenMinuteTimer.Interval = 60 * 10 * 1000 ' Every 10 Minutes
+        TenMinuteTimer.AutoReset = True
+        AddHandler TenMinuteTimer.Elapsed, AddressOf OnTenMinuteTimer
 
         Task.Run(Sub()
                      DoAsyncStartupProcesses()
@@ -199,7 +204,7 @@ Public Class PowerwallService
         SixSecondTimer.Stop()
         OneMinuteTime.Stop()
         If My.Settings.PVReportingEnabled Then FiveMinuteTimer.Stop()
-        If My.Settings.PWControlEnabled Then TenMinuteTimer.Stop()
+        TenMinuteTimer.Stop()
         EventLog.WriteEntry("Powerwall Service Paused", EventLogEntryType.Information, 105)
     End Sub
     Protected Overrides Sub OnStop()
@@ -328,12 +333,10 @@ Public Class PowerwallService
             End If
         End If
         If Minute Mod 10 = 1 Then
-            If My.Settings.PWControlEnabled Then
-                If TenMinuteTimer.Enabled = False Then
-                    TenMinuteTimer.Start()
-                    EventLog.WriteEntry("Ten Minute (Solar Forecast & Charge Monitoring) Timer Started", EventLogEntryType.Information, 111)
-                    CheckSOCLevel()
-                End If
+            If TenMinuteTimer.Enabled = False Then
+                TenMinuteTimer.Start()
+                EventLog.WriteEntry("Ten Minute (Solar Forecast & Charge Monitoring) Timer Started", EventLogEntryType.Information, 111)
+                CheckSOCLevel()
             End If
         End If
         AggregateToMinute()
