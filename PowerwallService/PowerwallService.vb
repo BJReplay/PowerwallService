@@ -487,6 +487,12 @@ Public Class PowerwallService
                         OnStandby = True
                         PreCharging = False
                     End If
+                ElseIf Not My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And SOC.percentage <= NoStandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                    PWIntededStatus = PWStatusEnum.Standby
+                    If SetPWMode("Morning SOC would be below required morning SOC, Standby Mode Not Enabled", "Enter", "Standby", SOC.percentage, self_consumption, Intent) = 202 Then
+                        OnStandby = True
+                        PreCharging = False
+                    End If
                 ElseIf My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
                     PWIntededStatus = PWStatusEnum.Standby
                     If SetPWMode("Current SOC above required morning SOC, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, self_consumption, Intent) = 202 Then
