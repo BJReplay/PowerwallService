@@ -15,7 +15,7 @@ Option Explicit On
 Namespace My
     
     <Global.System.Runtime.CompilerServices.CompilerGeneratedAttribute(),  _
-     Global.System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "16.7.0.0"),  _
+     Global.System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "16.8.1.0"),  _
      Global.System.ComponentModel.EditorBrowsableAttribute(Global.System.ComponentModel.EditorBrowsableState.Advanced)>  _
     Partial Friend NotInheritable Class MySettings
         Inherits Global.System.Configuration.ApplicationSettingsBase
@@ -413,18 +413,18 @@ Namespace My
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
          Global.System.Configuration.DefaultSettingValueAttribute("installer")>  _
-        Public ReadOnly Property PWGatewayUsername() As String
+        Public ReadOnly Property PWLocalInstallerUsername() As String
             Get
-                Return CType(Me("PWGatewayUsername"),String)
+                Return CType(Me("PWLocalInstallerUsername"),String)
             End Get
         End Property
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
          Global.System.Configuration.DefaultSettingValueAttribute("STTODO")>  _
-        Public ReadOnly Property PWGatewayPassword() As String
+        Public ReadOnly Property PWLocalInstallerPassword() As String
             Get
-                Return CType(Me("PWGatewayPassword"),String)
+                Return CType(Me("PWLocalInstallerPassword"),String)
             End Get
         End Property
         
@@ -650,27 +650,27 @@ Namespace My
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
          Global.System.Configuration.DefaultSettingValueAttribute("")>  _
-        Public ReadOnly Property PWPublicEmail() As String
+        Public ReadOnly Property PWCloudEmail() As String
             Get
-                Return CType(Me("PWPublicEmail"),String)
+                Return CType(Me("PWCloudEmail"),String)
             End Get
         End Property
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
          Global.System.Configuration.DefaultSettingValueAttribute("")>  _
-        Public ReadOnly Property PWPublicPassword() As String
+        Public ReadOnly Property PWCloudPassword() As String
             Get
-                Return CType(Me("PWPublicPassword"),String)
+                Return CType(Me("PWCloudPassword"),String)
             End Get
         End Property
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
          Global.System.Configuration.DefaultSettingValueAttribute("https://owner-api.teslamotors.com/")>  _
-        Public ReadOnly Property PWPublicAPI() As String
+        Public ReadOnly Property PWCloudAPI() As String
             Get
-                Return CType(Me("PWPublicAPI"),String)
+                Return CType(Me("PWCloudAPI"),String)
             End Get
         End Property
         
@@ -680,6 +680,42 @@ Namespace My
         Public ReadOnly Property PWEnergySiteID() As Long
             Get
                 Return CType(Me("PWEnergySiteID"),Long)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
+        Public ReadOnly Property PWLocalUserUsername() As String
+            Get
+                Return CType(Me("PWLocalUserUsername"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
+        Public ReadOnly Property PWLocalUserPassword() As String
+            Get
+                Return CType(Me("PWLocalUserPassword"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
+        Public ReadOnly Property PWCloudMFARecoveryToken() As String
+            Get
+                Return CType(Me("PWCloudMFARecoveryToken"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+        Public ReadOnly Property PWUseAutonomous() As Boolean
+            Get
+                Return CType(Me("PWUseAutonomous"),Boolean)
             End Get
         End Property
     End Class

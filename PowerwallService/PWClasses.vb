@@ -158,12 +158,10 @@ Public Class PWJson
         Public Property token As String
         Public Property provider As String
     End Class
-
     Public Class ListProducts
         Public Property response() As List(Of Products)
         Public Property count As Integer
     End Class
-
     Public Class Products
         Public Property energy_site_id As Long
         Public Property resource_type As String
@@ -181,7 +179,6 @@ Public Class PWJson
         Public Property breaker_alert_enabled As Boolean
         Public Property components As ProductComponents
     End Class
-
     Public Class ProductComponents
         Public Property battery As Boolean
         Public Property battery_type As String
@@ -191,27 +188,23 @@ Public Class PWJson
         Public Property load_meter As Boolean
         Public Property market_type As String
     End Class
-
-    Public Class PublicLoginRequest
+    Public Class CloudLoginRequest
         Public Property grant_type As String = "password"
         Public Property client_id As String = "81527cff06843c8634fdc09e8ac0abefb46ac849f38fe1e431c2ef2106796384"
         Public Property client_secret As String = "c7257eb71a564034f9419ee651c7d0e5f7aa6bfbd18bafb5c5c033b093bb2fa3"
         Public Property email As String
         Public Property password As String
     End Class
-
-    Public Class PublicLoginResponse
+    Public Class CloudLoginResponse
         Public Property access_token As String
         Public Property token_type As String
         Public Property expires_in As Integer
         Public Property refresh_token As String
         Public Property created_at As Integer
     End Class
-
     Public Class PowerwallStatus
         Public Property response As PowerwallStatusResponse
     End Class
-
     Public Class PowerwallStatusResponse
         Public Property site_name As String
         Public Property id As String
@@ -220,11 +213,9 @@ Public Class PWJson
         Public Property percentage_charged As Single
         Public Property battery_power As Integer
     End Class
-
     Public Class SiteStatus
         Public Property response As SiteStatusResponse
     End Class
-
     Public Class SiteStatusResponse
         Public Property resource_type As String
         Public Property site_name As String
@@ -238,28 +229,22 @@ Public Class PWJson
         Public Property sync_grid_alert_enabled As Boolean
         Public Property breaker_alert_enabled As Boolean
     End Class
-
-    Public Class PublicBackup
+    Public Class CloudBackup
         Public Property backup_reserve_percent As Decimal
     End Class
-
-    Public Class PublicOperation
+    Public Class CloudOperation
         Public Property default_real_mode As String
     End Class
-
-    Public Class PublicAPIResponse
+    Public Class CloudAPIResponse
         Public Property response As APIResponse
     End Class
-
     Public Class APIResponse
         Public Property code As Integer
         Public Property message As String
     End Class
-
-    Public Class PublicSiteInfo
+    Public Class CloudSiteInfo
         Public Property response As SiteInfoResponse
     End Class
-
     Public Class SiteInfoResponse
         Public Property id As String
         Public Property site_name As String
@@ -275,13 +260,11 @@ Public Class PWJson
         Public Property nameplate_energy As Decimal
         Public Property installation_time_zone As String
     End Class
-
     Public Class User_Settings
         Public Property storm_mode_enabled As Boolean
         Public Property sync_grid_alert_enabled As Boolean
         Public Property breaker_alert_enabled As Boolean
     End Class
-
     Public Class Components
         Public Property solar As Boolean
         Public Property solar_type As String
@@ -302,19 +285,16 @@ Public Class PWJson
         Public Property configurable As Boolean
         Public Property grid_services_enabled As Boolean
     End Class
-
     Public Class Tou_Settings
         Public Property optimization_strategy As String
         Public Property schedule() As List(Of Schedule)
     End Class
-
     Public Class Schedule
         Public Property target As String
         Public Property week_days() As List(Of Integer)
         Public Property start_seconds As Integer
         Public Property end_seconds As Integer
     End Class
-
 End Class
 Public Class SolCast
     Public Class OutputForecast

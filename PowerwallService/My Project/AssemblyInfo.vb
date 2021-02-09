@@ -12,7 +12,7 @@ Imports System.Runtime.InteropServices
 <Assembly: AssemblyDescription("Powerwall Logging and Control Service")>
 <Assembly: AssemblyCompany("Sheppard Consulting Pty Ltd")>
 <Assembly: AssemblyProduct("PowerwallService")>
-<Assembly: AssemblyCopyright("Copyright ©  2017-2020")>
+<Assembly: AssemblyCopyright("Copyright ©  2017-2021")>
 <Assembly: AssemblyTrademark("")>
 
 <Assembly: ComVisible(False)>
@@ -31,5 +31,5 @@ Imports System.Runtime.InteropServices
 ' by using the '*' as shown below:
 ' <Assembly: AssemblyVersion("1.0.*")>
 
-<Assembly: AssemblyVersion("3.2.2.0")>
-<Assembly: AssemblyFileVersion("3.2.2.0")>
+<Assembly: AssemblyVersion("4.0.0.0")>
+<Assembly: AssemblyFileVersion("4.0.0.0")>
