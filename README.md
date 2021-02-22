@@ -27,7 +27,7 @@ Powerwall Service basic installation instructions.
 
 
 
-Prerequisites - .Net Framework 4.6 or above
+Prerequisites - .Net Framework 4.7.2 or above
 -------------
 
 Unzip into a directory (e.g. C:\Tools\PowerwallService)
