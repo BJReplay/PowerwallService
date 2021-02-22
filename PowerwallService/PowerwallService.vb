@@ -8,6 +8,7 @@ Imports PowerwallService.SolCast
 Imports PowerwallService.PVOutput
 Imports PowerwallService.SunriseSunset
 Imports PowerwallService.PowerBIStreaming
+Imports TeslaAuth
 #End Region
 Public Class PowerwallService
 #Region "Variables"
@@ -385,7 +386,7 @@ Public Class PowerwallService
         End If
     End Sub
     Private Sub DoDailyTasks()
-        PWCloudToken = TeslaAuth.TeslaAuthHelper.RefreshToken(PWCloudRefreshToken)
+        PWCloudToken = TeslaAuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result.AccessToken
     End Sub
     Function GetUnsecuredJSONResult(Of JSONType)(URL As String) As JSONType
         Dim response As HttpWebResponse
@@ -1028,7 +1029,7 @@ Public Class PowerwallService
         If PWCloudToken = String.Empty Or ForceReLogin = True Then
             Try
                 Dim tokens As TeslaAuth.Tokens
-                tokens = TeslaAuth.TeslaAuthHelper.Authenticate(My.Settings.PWCloudEmail, My.Settings.PWCloudPassword, My.Settings.PWCloudMFARecoveryToken)
+                tokens = TeslaAuthHelper.AuthenticateAsync(My.Settings.PWCloudEmail, My.Settings.PWCloudPassword, My.Settings.PWCloudMFARecoveryToken).Result
                 PWCloudToken = tokens.AccessToken
                 PWCloudRefreshToken = tokens.RefreshToken
             Catch ex As Exception
