@@ -718,6 +718,15 @@ Namespace My
                 Return CType(Me("PWUseAutonomous"),Boolean)
             End Get
         End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
+        Public ReadOnly Property PWCloudToken() As String
+            Get
+                Return CType(Me("PWCloudToken"),String)
+            End Get
+        End Property
     End Class
 End Namespace
 

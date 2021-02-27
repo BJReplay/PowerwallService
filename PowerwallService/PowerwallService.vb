@@ -159,7 +159,7 @@ Public Class PowerwallService
         If My.Settings.PWUseAutonomous Then
             DischargeMode = autonomous
         End If
-        PWCloudToken = LoginPWCloud(ForceReLogin:=True)
+        PWCloudToken = LoginPWCloud()
         PWLocalToken = LoginPWLocalUser(ForceReLogin:=True)
         GetCloudProducts()
         GetCloudPWMode()
@@ -386,7 +386,7 @@ Public Class PowerwallService
         End If
     End Sub
     Private Sub DoDailyTasks()
-        PWCloudToken = TeslaAuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result.AccessToken
+        RefreshTokens()
     End Sub
     Function GetUnsecuredJSONResult(Of JSONType)(URL As String) As JSONType
         Dim response As HttpWebResponse
@@ -582,7 +582,7 @@ Public Class PowerwallService
                 SecondDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 2, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
             End If
             Dim NewForecastsRetrieved As Boolean = False
-            If DateAdd(DateInterval.Hour, 1, ForecastsRetrieved) < InvokedTime And InvokedTime.Hour < Sunset.Hour Then
+            If DateAdd(DateInterval.Hour, 1, ForecastsRetrieved) < InvokedTime And InvokedTime.Hour < (Sunset.Hour + 1) Then
                 PVForecast = GetSolCastResult(Of OutputForecast)()
                 If Not PVForecast Is Nothing Then
                     ForecastsRetrieved = InvokedTime
@@ -1026,12 +1026,21 @@ Public Class PowerwallService
         Return PWLocalToken
     End Function
     Function LoginPWCloud(Optional ForceReLogin As Boolean = False) As String
+        If PWCloudToken = String.Empty Then
+            If My.Settings.PWCloudToken <> String.Empty Then
+                PWCloudToken = My.Settings.PWCloudToken
+                EventLog.WriteEntry(String.Format("Skipping Cloud Login: Found Settings Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 904)
+            End If
+        End If
         If PWCloudToken = String.Empty Or ForceReLogin = True Then
             Try
-                Dim tokens As TeslaAuth.Tokens
-                tokens = TeslaAuthHelper.AuthenticateAsync(My.Settings.PWCloudEmail, My.Settings.PWCloudPassword, My.Settings.PWCloudMFARecoveryToken).Result
-                PWCloudToken = tokens.AccessToken
-                PWCloudRefreshToken = tokens.RefreshToken
+                PWCloudRefreshToken = TeslaAuthHelper.AuthenticateAsync(My.Settings.PWCloudEmail, My.Settings.PWCloudPassword, My.Settings.PWCloudMFARecoveryToken).Result.RefreshToken
+                With TeslaAuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result
+                    PWCloudToken = .AccessToken
+                    PWCloudRefreshToken = .RefreshToken
+                End With
+                EventLog.WriteEntry(String.Format("Initial Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 900)
+                EventLog.WriteEntry(String.Format("Initial Refresh Token: {0}", PWCloudRefreshToken), EventLogEntryType.Information, 901)
             Catch ex As Exception
                 EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
             End Try
@@ -1078,6 +1087,18 @@ Public Class PowerwallService
             Return Nothing
         End Try
     End Function
+    Private Sub RefreshTokens()
+        If PWCloudRefreshToken <> String.Empty Then
+            With TeslaAuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result
+                PWCloudToken = .AccessToken
+                PWCloudRefreshToken = .RefreshToken
+            End With
+            EventLog.WriteEntry(String.Format("Refreshed Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 902)
+            EventLog.WriteEntry(String.Format("Refreshed Refresh Token: {0}", PWCloudRefreshToken), EventLogEntryType.Information, 903)
+        Else
+            EventLog.WriteEntry(String.Format("No Refresh Token available, using existing Access Token", PWCloudToken), EventLogEntryType.Information, 905)
+        End If
+    End Sub
 #End Region
 #Region "PVOutput"
     Private Sub DoBackFill(AsAt As DateTime)
