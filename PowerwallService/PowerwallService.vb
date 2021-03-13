@@ -456,7 +456,7 @@ Public Class PowerwallService
         Dim RemainingOffPeak As Single
         Dim Intent As String = "Thinking"
         Dim NewTarget As Single = 0
-        If InvokedTime > Sunrise And InvokedTime < PeakStart Then
+        If InvokedTime > Sunrise And InvokedTime < Sunset And InvokedTime < PeakStart Then
             RemainingOvernightRatio = 0
             RemainingInsolationToday = CurrentDayForecast.PVEstimate
             ForecastInsolationTomorrow = NextDayForecastGeneration
@@ -480,6 +480,12 @@ Public Class PowerwallService
             ForecastInsolationTomorrow = NextDayForecastGeneration
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Sun is Down, Waiting for Off Peak"
+        ElseIf InvokedTime > Sunset And InvokedTime > OffPeakStart Then
+            RemainingOvernightRatio = 1
+            RemainingInsolationToday = 0
+            ForecastInsolationTomorrow = NextDayForecastGeneration
+            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
+            Intent = "Sun is Down, Off Peak"
         ElseIf InvokedTime > OffPeakStart And InvokedTime < PeakStart Then
             RemainingOvernightRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, PeakStart) + 1) / OffPeakHours)
             If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
@@ -826,12 +832,10 @@ Public Class PowerwallService
 #Region "Powerwall Control"
     Private Function SetPWMode(ActionMessage As String, ActionMode As String, ActionType As String, Target As Double, Mode As String, ByRef Intent As String) As Integer
         SkipObservation = True
-        'If Target > My.Settings.PWMinBackupPercentage Then
-        '    Target = Math.Round(Target) + 2
-        'End If
+        Target = (Target - 5) / 0.95 ' Convert to Cloud Target from local SOC target calcuted by charge planning routine
         If Target > 100 Then Target = 100
         If Target < 0 Then Target = 0
-        LastTarget = CInt(Target)
+        LastTarget = CInt(Math.Truncate(Target)) ' Truncate so that attempting to set to standby doesn't charge
         With PWIntendedMode
             .backup_reserve_percent = LastTarget
             .real_mode = Mode
@@ -1034,8 +1038,9 @@ Public Class PowerwallService
         End If
         If PWCloudToken = String.Empty Or ForceReLogin = True Then
             Try
-                PWCloudRefreshToken = TeslaAuthHelper.AuthenticateAsync(My.Settings.PWCloudEmail, My.Settings.PWCloudPassword, My.Settings.PWCloudMFARecoveryToken).Result.RefreshToken
-                With TeslaAuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result
+                Dim AuthHelper As New TeslaAuthHelper(String.Format("PowerwallService/{0}", My.Application.Info.Version.ToString))
+                PWCloudRefreshToken = AuthHelper.AuthenticateAsync(My.Settings.PWCloudEmail, My.Settings.PWCloudPassword, My.Settings.PWCloudMFARecoveryToken).Result.RefreshToken
+                With AuthHelper.RefreshTokenAsync(PWCloudRefreshToken, TeslaAccountRegion.Unknown).Result
                     PWCloudToken = .AccessToken
                     PWCloudRefreshToken = .RefreshToken
                 End With
@@ -1089,7 +1094,8 @@ Public Class PowerwallService
     End Function
     Private Sub RefreshTokens()
         If PWCloudRefreshToken <> String.Empty Then
-            With TeslaAuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result
+            Dim AuthHelper As New TeslaAuthHelper(String.Format("PowerwallService/{0}", My.Application.Info.Version.ToString))
+            With AuthHelper.RefreshTokenAsync(PWCloudRefreshToken, TeslaAccountRegion.Unknown).Result
                 PWCloudToken = .AccessToken
                 PWCloudRefreshToken = .RefreshToken
             End With
