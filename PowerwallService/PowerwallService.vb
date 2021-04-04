@@ -20,6 +20,8 @@ Public Class PowerwallService
     Const self_consumption As String = "self_consumption"
     Const backup As String = "backup"
     Const autonomous As String = "autonomous"
+    Const AppMinCharge As Decimal = 5
+    Const AppToLocalRatio As Decimal = CDec(95 / 100)
     Private DischargeMode As String = self_consumption
     Private ObsTA As New PWHistoryDataSetTableAdapters.observationsTableAdapter
     Private SolarTA As New PWHistoryDataSetTableAdapters.solarTableAdapter
@@ -52,7 +54,7 @@ Public Class PowerwallService
     Shared PreCharging As Boolean = False
     Shared OnStandby As Boolean = False
     Shared AboveMinBackup As Boolean = False
-    Shared LastTarget As Integer = 0
+    Shared LastTarget As Decimal = 0
     Shared OffPeakStart As DateTime
     Shared PeakStart As DateTime
     Shared OffPeakStartHour As Integer
@@ -455,7 +457,7 @@ Public Class PowerwallService
         Dim PWPeakConsumption As Integer = CInt(IIf(CurrentDOW = DayOfWeek.Saturday Or CurrentDOW = DayOfWeek.Sunday, My.Settings.PWPeakConsumptionWeekend, My.Settings.PWPeakConsumption))
         Dim RemainingOffPeak As Single
         Dim Intent As String = "Thinking"
-        Dim NewTarget As Single = 0
+        Dim NewTarget As Decimal = 0
         If InvokedTime > Sunrise And InvokedTime < Sunset And InvokedTime < PeakStart Then
             RemainingOvernightRatio = 0
             RemainingInsolationToday = CurrentDayForecast.PVEstimate
@@ -480,12 +482,12 @@ Public Class PowerwallService
             ForecastInsolationTomorrow = NextDayForecastGeneration
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Sun is Down, Waiting for Off Peak"
-        ElseIf InvokedTime > Sunset And InvokedTime > OffPeakStart Then
-            RemainingOvernightRatio = 1
-            RemainingInsolationToday = 0
-            ForecastInsolationTomorrow = NextDayForecastGeneration
-            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
-            Intent = "Sun is Down, Off Peak"
+            'ElseIf InvokedTime > Sunset And InvokedTime > OffPeakStart Then ' Suspect
+            '    RemainingOvernightRatio = 1
+            '    RemainingInsolationToday = 0
+            '    ForecastInsolationTomorrow = NextDayForecastGeneration
+            '    ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
+            '    Intent = "Sun is Down, Off Peak"
         ElseIf InvokedTime > OffPeakStart And InvokedTime < PeakStart Then
             RemainingOvernightRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, PeakStart) + 1) / OffPeakHours)
             If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
@@ -502,12 +504,12 @@ Public Class PowerwallService
         If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
         StandbyTargetSOC = My.Settings.PWMorningBuffer + (ShortfallInsolation / My.Settings.PWCapacity * 100)
         If StandbyTargetSOC > 100 Then StandbyTargetSOC = 100
-        NewTarget = CSng(IIf(My.Settings.PWOvernightStandby, StandbyTargetSOC, NoStandbyTargetSOC))
+        NewTarget = CDec(IIf(My.Settings.PWOvernightStandby, StandbyTargetSOC, NoStandbyTargetSOC))
         If InvokedTime > Sunset And InvokedTime < OffPeakStart Then
             If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Then Intent = "Planning to Charge" Else Intent = "No Charging Required"
         End If
         Try
-            If InvokedTime > DateAdd(DateInterval.Minute, -20, PeakStart) And Not CurrentDayAllOffPeak And (PreCharging Or AboveMinBackup Or OnStandby) Then
+            If InvokedTime > DateAdd(DateInterval.Minute, -15, PeakStart) And Not CurrentDayAllOffPeak And (PreCharging Or AboveMinBackup Or OnStandby) Then
                 OperationLockout = PeakStart
                 EventLog.WriteEntry(String.Format("Reaching end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, StandbyTargetSOC), EventLogEntryType.Information, 504)
                 DoExitCharging(Intent)
@@ -575,7 +577,7 @@ Public Class PowerwallService
                 PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = My.Settings.PWMorningBuffer, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .RemainingOffPeak = RemainingOffPeak * My.Settings.PWCapacity / 100, .Shortfall = ShortfallInsolation})
                 Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBIChargeIntentEndpoint, PBIRows)
             Catch ex As Exception
-
+                EventLog.WriteEntry(String.Format("Failed to write Charge Plan to Power BI: Ex:{0} ({1})", ex.GetType, ex.Message), EventLogEntryType.Warning, 911)
             End Try
         End If
     End Sub
@@ -818,7 +820,7 @@ Public Class PowerwallService
                     PBIRows.Rows.Add(New SixSecondOb With {.AsAt = ObservationTime, .Battery = MeterReading.battery.instant_power, .Grid = MeterReading.site.instant_power, .Load = MeterReading.load.instant_power, .SOC = SOC.percentage, .Solar = CSng(IIf(MeterReading.solar.instant_power < 0, 0, MeterReading.solar.instant_power)), .Voltage = MeterReading.battery.instant_average_voltage})
                     Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBILiveLoggingEndpoint, PBIRows)
                 Catch ex As Exception
-
+                    EventLog.WriteEntry(String.Format("Failed to write Six Second Observations to Power BI: Ex:{0} ({1})", ex.GetType, ex.Message), EventLogEntryType.Warning, 910)
                 End Try
             End If
         Catch Ex As Exception
@@ -830,30 +832,29 @@ Public Class PowerwallService
     End Function
 #End Region
 #Region "Powerwall Control"
-    Private Function SetPWMode(ActionMessage As String, ActionMode As String, ActionType As String, Target As Double, Mode As String, ByRef Intent As String) As Integer
+    Private Function SetPWMode(ActionMessage As String, ActionMode As String, ActionType As String, Target As Decimal, Mode As String, ByRef Intent As String) As Integer
         SkipObservation = True
-        Target = (Target - 5) / 0.95 ' Convert to Cloud Target from local SOC target calcuted by charge planning routine
+        LastTarget = Target
+        Target = (Target - AppMinCharge) / AppToLocalRatio ' Convert to Cloud Target from local SOC target calcuted by charge planning routine
         If Target > 100 Then Target = 100
         If Target < 0 Then Target = 0
-        LastTarget = CInt(Math.Truncate(Target)) ' Truncate so that attempting to set to standby doesn't charge
         With PWIntendedMode
             .backup_reserve_percent = LastTarget
             .real_mode = Mode
-            ' To Do: Change mode to autonomous here.
         End With
         PendingModeChange = True
         Try
             If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format(ActionMessage & " Current SOC={0}, Current Target={1}", SOC.percentage, Target), EventLogEntryType.Information, 511)
             Intent = ActionType
-            Dim ChargeSettings As New Operation With {.backup_reserve_percent = LastTarget, .real_mode = Mode}
+            Dim ChargeSettings As New Operation With {.backup_reserve_percent = Target, .real_mode = Mode}
             Dim APIResult As Integer = DoSetPWModeCloudAPICalls(ChargeSettings)
             If APIResult = 202 Or APIResult = 200 Then
-                EventLog.WriteEntry(String.Format("{5}ed {6} Mode: Current SOC={0}, Current Target={1}, Set Mode={2}, Set Backup Percentage={3}, APIResult = {4}", SOC.percentage, Target, ChargeSettings.real_mode, ChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Information, 512)
+                EventLog.WriteEntry(String.Format("{5}ed {6} Mode: Current SOC={0}, Raw Target={1}, Set Mode={2}, API Call Target={3}, APIResult = {4}", SOC.percentage, LastTarget, ChargeSettings.real_mode, ChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Information, 512)
                 AboveMinBackup = (ChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
                 Intent = ActionType
                 SetPWMode = 202 ' Calls to SetPWMode expect APIResult of 202 as per behaviour for FW 1.42 and earlier
             Else
-                EventLog.WriteEntry(String.Format("Failed to {5} {6} Mode: Current SOC={0}, Attempted Target={1}, Mode={2}, BackupPercentage={3}, APIResult = {4}", SOC.percentage, Target, ChargeSettings.real_mode, ChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Warning, 513)
+                EventLog.WriteEntry(String.Format("Failed to {5} {6} Mode: Current SOC={0}, Raw Target={1}, Mode={2}, API Call Target={3}, APIResult = {4}", SOC.percentage, LastTarget, ChargeSettings.real_mode, ChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Warning, 513)
                 Intent = String.Format("Trying to {0} {1}", ActionMode, ActionType)
                 SetPWMode = APIResult
             End If
