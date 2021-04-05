@@ -23,21 +23,21 @@ Public Class PowerwallService
     Const AppMinCharge As Decimal = 5
     Const AppToLocalRatio As Decimal = CDec(95 / 100)
     Private DischargeMode As String = self_consumption
-    Private ObsTA As New PWHistoryDataSetTableAdapters.observationsTableAdapter
-    Private SolarTA As New PWHistoryDataSetTableAdapters.solarTableAdapter
-    Private SOCTA As New PWHistoryDataSetTableAdapters.socTableAdapter
-    Private BatteryTA As New PWHistoryDataSetTableAdapters.batteryTableAdapter
-    Private LoadTA As New PWHistoryDataSetTableAdapters.loadTableAdapter
-    Private SiteTA As New PWHistoryDataSetTableAdapters.siteTableAdapter
-    Private CompactTA As New PWHistoryDataSetTableAdapters.CompactObsTableAdapter
-    Private CompactTALocal As New PWHistoryDataSetTableAdapters.CompactObsTALocal
-    Private Get5MinuteAveragesTA As New PWHistoryDataSetTableAdapters.spGet5MinuteAveragesTableAdapter
-    Private SPs As New PWHistoryDataSetTableAdapters.SPs
-    Private SixSecondTimer As New Timers.Timer
-    Private OneMinuteTime As New Timers.Timer
-    Private FiveMinuteTimer As New Timers.Timer
-    Private TenMinuteTimer As New Timers.Timer
-    Private DailyTimer As New Timers.Timer
+    Private ReadOnly ObsTA As New PWHistoryDataSetTableAdapters.observationsTableAdapter
+    Private ReadOnly SolarTA As New PWHistoryDataSetTableAdapters.solarTableAdapter
+    Private ReadOnly SOCTA As New PWHistoryDataSetTableAdapters.socTableAdapter
+    Private ReadOnly BatteryTA As New PWHistoryDataSetTableAdapters.batteryTableAdapter
+    Private ReadOnly LoadTA As New PWHistoryDataSetTableAdapters.loadTableAdapter
+    Private ReadOnly SiteTA As New PWHistoryDataSetTableAdapters.siteTableAdapter
+    Private ReadOnly CompactTA As New PWHistoryDataSetTableAdapters.CompactObsTableAdapter
+    Private ReadOnly CompactTALocal As New PWHistoryDataSetTableAdapters.CompactObsTALocal
+    Private ReadOnly Get5MinuteAveragesTA As New PWHistoryDataSetTableAdapters.spGet5MinuteAveragesTableAdapter
+    Private ReadOnly SPs As New PWHistoryDataSetTableAdapters.SPs
+    Private ReadOnly SixSecondTimer As New Timers.Timer
+    Private ReadOnly OneMinuteTime As New Timers.Timer
+    Private ReadOnly FiveMinuteTimer As New Timers.Timer
+    Private ReadOnly TenMinuteTimer As New Timers.Timer
+    Private ReadOnly DailyTimer As New Timers.Timer
     Shared PWLocalCookies As CookieCollection
     Shared PWLocalToken As String = String.Empty
     Shared PWCloudToken As String = String.Empty
@@ -63,7 +63,6 @@ Public Class PowerwallService
     Shared OperationLockout As DateTime = DateAdd(DateInterval.Hour, -2, Now)
     Shared CurrentDayAllOffPeak As Boolean
     Shared NextDayAllDayOffPeak As Boolean
-    Shared IsCharging As Boolean = False
     Shared LastPeriodForecast As Forecast
     Shared CurrentPeriodForecast As Forecast
     Shared PVForecast As OutputForecast
@@ -73,15 +72,11 @@ Public Class PowerwallService
     Shared Sunrise As DateTime
     Shared Sunset As DateTime
     Shared AsAtSunrise As Result
-    Shared DBLock As New Object
-    Shared PWLock As New Object
+    Shared ReadOnly DBLock As New Object
+    Shared ReadOnly PWLock As New Object
     Shared SkipObservation As Boolean = False
     Shared PWStatus As PWStatusEnum = PWStatusEnum.Standby
-    Shared PWIntededStatus As PWStatusEnum = PWStatusEnum.Standby
-    Shared PWIntendedMode As New Operation With {.real_mode = self_consumption, .backup_reserve_percent = 0}
-    Shared CurrentChargeSettings As New Operation With {.real_mode = self_consumption, .backup_reserve_percent = 0}
-    Shared PendingModeChange As Boolean = False
-    Shared PendingChangeRetryArmed As Boolean = False
+    Shared ReadOnly CurrentChargeSettings As New Operation With {.real_mode = self_consumption, .backup_reserve_percent = 0}
     Shared PWCloudEnergyID As Long
     Shared PWCloudSiteID As String
 #End Region
@@ -167,15 +162,6 @@ Public Class PowerwallService
         GetCloudPWMode()
         If My.Settings.PWForceModeOnStartup Then
             Dim Intent As String = "Thinking"
-            If My.Settings.PWForceMode = backup Then
-                If CurrentChargeSettings.backup_reserve_percent = 100 Then
-                    PWIntededStatus = PWStatusEnum.Standby
-                Else
-                    PWIntededStatus = PWStatusEnum.Charging
-                End If
-            Else
-                PWIntededStatus = PWStatusEnum.Discharging
-            End If
             Dim APIResult As Integer = SetPWMode("Execute Force Startup Mode", "Enter", My.Settings.PWForceMode.ToString, My.Settings.PWForceBackupPercentage, My.Settings.PWForceMode, Intent)
             If APIResult = 202 Then
                 EventLog.WriteEntry(String.Format("Forced PW Mode on Startup to: Mode={0}, BackupPercentage={1}, APIResult = {2}", My.Settings.PWForceMode, My.Settings.PWForceBackupPercentage, APIResult), EventLogEntryType.Information, 800)
@@ -345,21 +331,6 @@ Public Class PowerwallService
             End If
         End If
         AggregateToMinute()
-        If PendingModeChange Then
-            If PendingChangeRetryArmed Then
-                GetObservationAndStore()
-                GetCloudPWMode()
-                'Math.Abs(PWIntendedMode.backup_reserve_percent - CurrentChargeSettings.backup_reserve_percent) > 5
-                If PWIntendedMode.real_mode <> CurrentChargeSettings.real_mode Or PWStatus <> PWIntededStatus Then
-                    Dim Intent As String = "Set Mode"
-                    SetPWMode("Repeating last attempt:", "Enter", PWIntendedMode.real_mode.ToString, PWIntendedMode.backup_reserve_percent, PWIntendedMode.real_mode, Intent)
-                End If
-                PendingModeChange = False
-                PendingChangeRetryArmed = False
-            Else
-                PendingChangeRetryArmed = True
-            End If
-        End If
     End Sub
     Private Sub DoFiveMinuteTasks()
         If My.Settings.PVReportingEnabled Then
@@ -402,7 +373,7 @@ Public Class PowerwallService
             Catch ex As Exception
                 Return Nothing
             End Try
-            If Not response Is Nothing Then
+            If response IsNot Nothing Then
                 Dim dataStream As Stream = response.GetResponseStream()
                 Dim reader As StreamReader = New StreamReader(dataStream)
                 Dim responseFromServer As String = reader.ReadToEnd()
@@ -517,45 +488,38 @@ Public Class PowerwallService
                 If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Minimum required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 500)
                 If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OffPeakStart, PeakStart), EventLogEntryType.Information, 714)
                 If NextDayAllDayOffPeak And (My.Settings.PWOvernightStandby Or My.Settings.PWWeekendStandbyOnTarget) And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                    PWIntededStatus = PWStatusEnum.Standby
                     If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
                 ElseIf Not My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And SOC.percentage <= NoStandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                    PWIntededStatus = PWStatusEnum.Standby
                     If SetPWMode("Morning SOC would be below required morning SOC, Standby Mode Not Enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
                 ElseIf My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                    PWIntededStatus = PWStatusEnum.Standby
                     If SetPWMode("Current SOC above required morning SOC, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
                 ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And CurrentDayAllOffPeak And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                    PWIntededStatus = PWStatusEnum.Standby
                     If SetPWMode("Current SOC above weekend target, standby on target enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
                 ElseIf (SOC.percentage < StandbyTargetSOC And OnStandby And Not (CurrentDayAllOffPeak Or NextDayAllDayOffPeak)) Or (SOC.percentage < NoStandbyTargetSOC And Not OnStandby And Not PreCharging And Not NextDayAllDayOffPeak) Then
-                    PWIntededStatus = PWStatusEnum.Charging
                     If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 501)
                     If SetPWMode("Current SOC below required morning SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
                         PreCharging = True
                         OnStandby = False
                     End If
                 ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby And My.Settings.PWOvernightStandby Then
-                    PWIntededStatus = PWStatusEnum.Standby
                     EventLog.WriteEntry(String.Format("Current SOC above required setting and Standby Mode Enabled: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 505)
                     If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
                 ElseIf (LastTarget < NewTarget And OnStandby And Not (CurrentDayAllOffPeak Or NextDayAllDayOffPeak)) Or (LastTarget < NewTarget And PreCharging) Then
-                    PWIntededStatus = PWStatusEnum.Charging
                     If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
                     If SetPWMode("Current SOC below required morning SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
                         PreCharging = True
@@ -592,7 +556,7 @@ Public Class PowerwallService
             Dim NewForecastsRetrieved As Boolean = False
             If DateAdd(DateInterval.Hour, 1, ForecastsRetrieved) < InvokedTime And InvokedTime.Hour < (Sunset.Hour + 1) Then
                 PVForecast = GetSolCastResult(Of OutputForecast)()
-                If Not PVForecast Is Nothing Then
+                If PVForecast IsNot Nothing Then
                     ForecastsRetrieved = InvokedTime
                     NewForecastsRetrieved = True
                     CurrentDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 0, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
@@ -661,7 +625,7 @@ Public Class PowerwallService
         If CurrentPeriodForecast Is Nothing Or LastPeriodForecast Is Nothing Then
             GetForecasts()
         End If
-        If Not CurrentPeriodForecast Is Nothing And Not LastPeriodForecast Is Nothing Then
+        If CurrentPeriodForecast IsNot Nothing And LastPeriodForecast IsNot Nothing Then
             If CurrentPeriodForecast.period_end.ToLocalTime < InvokedTime Then
                 GetForecasts()
             End If
@@ -751,7 +715,7 @@ Public Class PowerwallService
     Sub GetObservationAndStore()
         Dim ObservationTime As DateTime
         Dim LastObservationTime As DateTime
-        If Not MeterReading Is Nothing Then
+        If MeterReading IsNot Nothing Then
             LastObservationTime = MeterReading.site.last_communication_time
         End If
         Dim GotResults As Boolean = False
@@ -762,7 +726,7 @@ Public Class PowerwallService
                         MeterReading = GetLocalPWAPIResult(Of MeterAggregates)("meters/aggregates")
                         SOC = GetLocalPWAPIResult(Of SOC)("system_status/soe")
                     End If
-                    If Not MeterReading Is Nothing Then
+                    If MeterReading IsNot Nothing Then
                         ObservationTime = MeterReading.site.last_communication_time
                         Select Case MeterReading.battery.instant_power
                             Case < -25
@@ -838,11 +802,6 @@ Public Class PowerwallService
         Target = (Target - AppMinCharge) / AppToLocalRatio ' Convert to Cloud Target from local SOC target calcuted by charge planning routine
         If Target > 100 Then Target = 100
         If Target < 0 Then Target = 0
-        With PWIntendedMode
-            .backup_reserve_percent = LastTarget
-            .real_mode = Mode
-        End With
-        PendingModeChange = True
         Try
             If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format(ActionMessage & " Current SOC={0}, Current Target={1}", SOC.percentage, Target), EventLogEntryType.Information, 511)
             Intent = ActionType
@@ -866,8 +825,8 @@ Public Class PowerwallService
     Private Function DoSetPWModeCloudAPICalls(ChargeSettings As Operation) As Integer
         Dim BackupSetting As New CloudBackup With {.backup_reserve_percent = ChargeSettings.backup_reserve_percent}
         Dim OperationSetting As New CloudOperation With {.default_real_mode = ChargeSettings.real_mode}
-        Dim ModeResponse As CloudAPIResponse = PostPWCloudAPISettings(Of CloudBackup)("energy_sites/" & PWCloudEnergyID.ToString.Trim & "/backup", BackupSetting)
-        Dim PercentageResponse As CloudAPIResponse = PostPWCloudAPISettings(Of CloudOperation)("energy_sites/" & PWCloudEnergyID.ToString.Trim & "/operation", OperationSetting)
+        Dim ModeResponse As CloudAPIResponse = PostPWCloudAPISettings("energy_sites/" & PWCloudEnergyID.ToString.Trim & "/backup", BackupSetting)
+        Dim PercentageResponse As CloudAPIResponse = PostPWCloudAPISettings("energy_sites/" & PWCloudEnergyID.ToString.Trim & "/operation", OperationSetting)
         If ModeResponse.response.code >= 200 And ModeResponse.response.code <= 202 And PercentageResponse.response.code >= 200 And PercentageResponse.response.code <= 202 Then
             DoSetPWModeCloudAPICalls = 202
         Else
@@ -1054,7 +1013,6 @@ Public Class PowerwallService
         Return PWCloudToken
     End Function
     Private Sub DoExitCharging(ByRef Intent As String)
-        PWIntededStatus = PWStatusEnum.Discharging
         If SetPWMode("Exit Charge or Standby Mode", "Enter", DischargeMode, My.Settings.PWMinBackupPercentage, DischargeMode, Intent) = 202 Then
             PreCharging = False
             OnStandby = False
@@ -1080,7 +1038,7 @@ Public Class PowerwallService
             Catch ex As Exception
                 Return Nothing
             End Try
-            If Not response Is Nothing Then
+            If response IsNot Nothing Then
                 Dim dataStream As Stream = response.GetResponseStream()
                 Dim reader As StreamReader = New StreamReader(dataStream)
                 Dim responseFromServer As String = reader.ReadToEnd()
@@ -1122,7 +1080,7 @@ Public Class PowerwallService
             If FoundRecTimeStamp = CurrRecTimeStamp Then
                 Try
                     FiveMinData = GetFiveMinuteData(CurrRecTimeStamp)
-                    If Not FiveMinData Is Nothing Then
+                    If FiveMinData IsNot Nothing Then
                         If CheckSunIsUp(CurrRecTimeStamp) Then
                             If My.Settings.PVSendPV AndAlso rec.v2 = "NaN" AndAlso FiveMinData.solar_instant_power > 0 Then RecOK = False
                             If My.Settings.PVSendForecast AndAlso rec(My.Settings.PVSendForecastAs).ToString = "NaN" AndAlso FiveMinData.solcast_forecast > 0 Then RecOK = False
@@ -1165,7 +1123,7 @@ Public Class PowerwallService
     Private Sub SendPowerwallData(AsAt As DateTime, Optional FiveMinData As PWHistoryDataSet.spGet5MinuteAveragesRow = Nothing)
         Try
             If FiveMinData Is Nothing Then FiveMinData = GetFiveMinuteData(AsAt)
-            If Not FiveMinData Is Nothing Then
+            If FiveMinData IsNot Nothing Then
                 Dim Params As New List(Of ParamData)
                 If CheckSunIsUp(AsAt) Then
                     If My.Settings.PVSendPV Then

@@ -2,8 +2,6 @@
 Imports System.Configuration.Install
 
 Public Class ProjectInstaller
-
-    <CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2214:DoNotCallOverridableMethodsInConstructors")>
     Public Sub New()
         MyBase.New()
         'This call is required by the Component Designer.
