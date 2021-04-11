@@ -315,7 +315,7 @@ Public Class PowerwallService
                 If FiveMinuteTimer.Enabled = False Then
                     FiveMinuteTimer.Start()
                     EventLog.WriteEntry("Five Minute (PVOutput & Mode Check) Timer Started", EventLogEntryType.Information, 110)
-                    SendPowerwallData(Now)
+                    DoFiveMinuteTasks()
                 End If
             End If
         End If
@@ -323,7 +323,7 @@ Public Class PowerwallService
             If TenMinuteTimer.Enabled = False Then
                 TenMinuteTimer.Start()
                 EventLog.WriteEntry("Ten Minute (Solar Forecast & Charge Monitoring) Timer Started", EventLogEntryType.Information, 111)
-                CheckSOCLevel()
+                DoTenMinuteTasks()
             End If
             If DailyTimer.Enabled = False Then
                 DailyTimer.Start()
