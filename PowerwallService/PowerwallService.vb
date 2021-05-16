@@ -507,7 +507,7 @@ Public Class PowerwallService
                         OnStandby = True
                         PreCharging = False
                     End If
-                ElseIf (SOC.percentage < StandbyTargetSOC And OnStandby And Not (CurrentDayAllOffPeak Or NextDayAllDayOffPeak)) Or (SOC.percentage < NoStandbyTargetSOC And Not OnStandby And Not PreCharging And Not NextDayAllDayOffPeak) Then
+                ElseIf (SOC.percentage < StandbyTargetSOC And OnStandby And Not (CurrentDayAllOffPeak Or NextDayAllDayOffPeak)) Or (SOC.percentage < NoStandbyTargetSOC And Not OnStandby And Not PreCharging And Not (CurrentDayAllOffPeak Or NextDayAllDayOffPeak)) Then
                     If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 501)
                     If SetPWMode("Current SOC below required morning SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
                         PreCharging = True
