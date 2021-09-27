@@ -730,17 +730,6 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.ConnectionString),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("Data Source=pwhistory.database.windows.net;Initial Catalog=PWHistory;Persist Secu"& _ 
-            "rity Info=True;User ID=PWMonitor;Password=tf$EJN&TX4NUzxCDvzbNfHaSe$u@NwEC")>  _
-        Public ReadOnly Property PWHistoryConnectionString() As String
-            Get
-                Return CType(Me("PWHistoryConnectionString"),String)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
          Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
         Public ReadOnly Property PWPeakConsumptionUseHistory() As Boolean
             Get
