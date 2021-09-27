@@ -79,6 +79,7 @@ Public Class PowerwallService
     Shared ReadOnly CurrentChargeSettings As New Operation With {.real_mode = self_consumption, .backup_reserve_percent = 0}
     Shared PWCloudEnergyID As Long
     Shared PWCloudSiteID As String
+    Shared PeakConsumption As Integer = 0
 #End Region
 #Region "Timer Handlers"
     Protected Async Sub OnSixSecondTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
@@ -160,6 +161,8 @@ Public Class PowerwallService
         PWLocalToken = LoginPWLocalUser(ForceReLogin:=True)
         GetCloudProducts()
         GetCloudPWMode()
+        GetPeakConsumption()
+
         If My.Settings.PWForceModeOnStartup Then
             Dim Intent As String = "Thinking"
             Dim APIResult As Integer = SetPWMode("Execute Force Startup Mode", "Enter", My.Settings.PWForceMode.ToString, My.Settings.PWForceBackupPercentage, My.Settings.PWForceMode, Intent)
@@ -360,6 +363,7 @@ Public Class PowerwallService
     End Sub
     Private Sub DoDailyTasks()
         RefreshTokens()
+        GetPeakConsumption()
     End Sub
     Function GetUnsecuredJSONResult(Of JSONType)(URL As String) As JSONType
         Dim response As HttpWebResponse
@@ -414,6 +418,15 @@ Public Class PowerwallService
         End If
         Return False
     End Function
+    Private Sub GetPeakConsumption()
+        PeakConsumption = 0
+        Try
+            PeakConsumption = CInt(SPs.fnGetMonthlyPeakLoad(PeakStartHour:=PeakStartHour, PeakEndHour:=(OffPeakStartHour - 1)))
+            EventLog.WriteEntry(String.Format("Peak Consumption Set To: {0}", PeakConsumption), EventLogEntryType.Information, 803)
+        Catch ex As Exception
+            EventLog.WriteEntry(String.Format("Failed to get Peak Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 802)
+        End Try
+    End Sub
 #End Region
 #Region "Forecasts and Targets"
     Sub CheckSOCLevel()
@@ -429,6 +442,11 @@ Public Class PowerwallService
         Dim RemainingOffPeak As Single
         Dim Intent As String = "Thinking"
         Dim NewTarget As Decimal = 0
+        If My.Settings.PWPeakConsumptionUseHistory Then
+            If PeakConsumption > 0 Then
+                PWPeakConsumption = PeakConsumption
+            End If
+        End If
         If InvokedTime > Sunrise And InvokedTime < Sunset And InvokedTime < PeakStart Then
             RemainingOvernightRatio = 0
             RemainingInsolationToday = CurrentDayForecast.PVEstimate
@@ -880,6 +898,10 @@ Public Class PowerwallService
             EventLog.WriteEntry(String.Format("Site ID={0}, Powerwall ID={1}", PWCloudEnergyID, PWCloudSiteID), EventLogEntryType.Information, 603)
         Catch ex As Exception
             EventLog.WriteEntry(String.Format("Error Getting Site ID: {0}, {1}", ex.Message, ex.StackTrace), EventLogEntryType.Warning, 1603)
+            If ConfigEnergyID <> 0 Then
+                PWCloudEnergyID = ConfigEnergyID
+                EventLog.WriteEntry(String.Format("Falling back to Config Site ID: {0}", PWCloudEnergyID), EventLogEntryType.Warning, 2603)
+            End If
         End Try
     End Sub
     Function GetPWCloudAPIResult(Of JSONType)(API As String, Optional ForceReLogin As Boolean = False) As JSONType

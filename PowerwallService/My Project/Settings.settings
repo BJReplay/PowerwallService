@@ -235,5 +235,16 @@
     <Setting Name="PWCloudToken" Type="System.String" Scope="Application">
       <Value Profile="(Default)" />
     </Setting>
+    <Setting Name="PWHistoryConnectionString" Type="(Connection string)" Scope="Application">
+      <DesignTimeValue Profile="(Default)">&lt;?xml version="1.0" encoding="utf-16"?&gt;
+&lt;SerializableConnectionString xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"&gt;
+  &lt;ConnectionString&gt;Data Source=pwhistory.database.windows.net;Initial Catalog=PWHistory;Persist Security Info=True;User ID=PWMonitor;Password=tf$EJN&amp;amp;TX4NUzxCDvzbNfHaSe$u@NwEC&lt;/ConnectionString&gt;
+  &lt;ProviderName&gt;System.Data.SqlClient&lt;/ProviderName&gt;
+&lt;/SerializableConnectionString&gt;</DesignTimeValue>
+      <Value Profile="(Default)">Data Source=pwhistory.database.windows.net;Initial Catalog=PWHistory;Persist Security Info=True;User ID=PWMonitor;Password=tf$EJN&amp;TX4NUzxCDvzbNfHaSe$u@NwEC</Value>
+    </Setting>
+    <Setting Name="PWPeakConsumptionUseHistory" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

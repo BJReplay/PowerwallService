@@ -15,7 +15,7 @@ Option Explicit On
 Namespace My
     
     <Global.System.Runtime.CompilerServices.CompilerGeneratedAttribute(),  _
-     Global.System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "16.8.1.0"),  _
+     Global.System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "16.10.0.0"),  _
      Global.System.ComponentModel.EditorBrowsableAttribute(Global.System.ComponentModel.EditorBrowsableState.Advanced)>  _
     Partial Friend NotInheritable Class MySettings
         Inherits Global.System.Configuration.ApplicationSettingsBase
@@ -725,6 +725,26 @@ Namespace My
         Public ReadOnly Property PWCloudToken() As String
             Get
                 Return CType(Me("PWCloudToken"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.ConnectionString),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("Data Source=pwhistory.database.windows.net;Initial Catalog=PWHistory;Persist Secu"& _ 
+            "rity Info=True;User ID=PWMonitor;Password=tf$EJN&TX4NUzxCDvzbNfHaSe$u@NwEC")>  _
+        Public ReadOnly Property PWHistoryConnectionString() As String
+            Get
+                Return CType(Me("PWHistoryConnectionString"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+        Public ReadOnly Property PWPeakConsumptionUseHistory() As Boolean
+            Get
+                Return CType(Me("PWPeakConsumptionUseHistory"),Boolean)
             End Get
         End Property
     End Class
