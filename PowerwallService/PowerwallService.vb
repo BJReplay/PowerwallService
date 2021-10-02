@@ -34,7 +34,7 @@ Public Class PowerwallService
     Private ReadOnly Get5MinuteAveragesTA As New PWHistoryDataSetTableAdapters.spGet5MinuteAveragesTableAdapter
     Private ReadOnly SPs As New PWHistoryDataSetTableAdapters.SPs
     Private ReadOnly SixSecondTimer As New Timers.Timer
-    Private ReadOnly OneMinuteTime As New Timers.Timer
+    Private ReadOnly OneMinuteTimer As New Timers.Timer
     Private ReadOnly FiveMinuteTimer As New Timers.Timer
     Private ReadOnly TenMinuteTimer As New Timers.Timer
     Private ReadOnly DailyTimer As New Timers.Timer
@@ -87,7 +87,7 @@ Public Class PowerwallService
                            GetObservationAndStore()
                        End Sub)
     End Sub
-    Protected Async Sub OnOneMinuteTime(Sender As Object, Args As System.Timers.ElapsedEventArgs)
+    Protected Async Sub OnOneMinuteTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
         Await Task.Run(Sub()
                            DoPerMinuteTasks()
                        End Sub)
@@ -103,6 +103,9 @@ Public Class PowerwallService
                        End Sub)
     End Sub
     Protected Async Sub OnDailyTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
+        If DailyTimer.Interval <> (60 * 1000 * 60 * 24) Then ' Every 24 Hours
+            DailyTimer.Interval = (60 * 1000 * 60 * 24) ' Reset to every 24 Hours
+        End If
         Await Task.Run(Sub()
                            DoDailyTasks()
                        End Sub)
@@ -127,9 +130,9 @@ Public Class PowerwallService
         SixSecondTimer.AutoReset = True
         AddHandler SixSecondTimer.Elapsed, AddressOf OnSixSecondTimer
 
-        OneMinuteTime.Interval = 60 * 1000 ' Every Minute
-        OneMinuteTime.AutoReset = True
-        AddHandler OneMinuteTime.Elapsed, AddressOf OnOneMinuteTime
+        OneMinuteTimer.Interval = 60 * 1000 ' Every Minute
+        OneMinuteTimer.AutoReset = True
+        AddHandler OneMinuteTimer.Elapsed, AddressOf OnOneMinuteTimer
 
         If My.Settings.PVReportingEnabled Then
             FiveMinuteTimer.Interval = 5 * 60 * 1000 ' Every Five Minutes
@@ -141,7 +144,7 @@ Public Class PowerwallService
         TenMinuteTimer.AutoReset = True
         AddHandler TenMinuteTimer.Elapsed, AddressOf OnTenMinuteTimer
 
-        DailyTimer.Interval = 60 * 1000 * 60 * 24 ' Every 24 Hours
+        DailyTimer.Interval = (60 * 1000 * 60 * 24) ' Every 24 Hours
         DailyTimer.AutoReset = True
         AddHandler DailyTimer.Elapsed, AddressOf OnDailyTimer
 
@@ -188,7 +191,7 @@ Public Class PowerwallService
 
         Task.Run(Sub()
                      SleepUntilSecBoundary(60)
-                     OneMinuteTime.Start()
+                     OneMinuteTimer.Start()
                      DoPerMinuteTasks()
                      EventLog.WriteEntry("One Minute Timer Started", EventLogEntryType.Information, 109)
                  End Sub)
@@ -196,7 +199,7 @@ Public Class PowerwallService
     Protected Overrides Sub OnContinue()
         EventLog.WriteEntry("Powerwall Service Resuming", EventLogEntryType.Information, 102)
         SixSecondTimer.Start()
-        OneMinuteTime.Start()
+        OneMinuteTimer.Start()
         Task.Run(Sub()
                      DebugTask()
                  End Sub
@@ -206,7 +209,7 @@ Public Class PowerwallService
     Protected Overrides Sub OnPause()
         EventLog.WriteEntry("Powerwall Service Pausing", EventLogEntryType.Information, 104)
         SixSecondTimer.Stop()
-        OneMinuteTime.Stop()
+        OneMinuteTimer.Stop()
         If My.Settings.PVReportingEnabled Then FiveMinuteTimer.Stop()
         TenMinuteTimer.Stop()
         EventLog.WriteEntry("Powerwall Service Paused", EventLogEntryType.Information, 105)
@@ -215,8 +218,8 @@ Public Class PowerwallService
         EventLog.WriteEntry("Powerwall Service Stopping", EventLogEntryType.Information, 106)
         SixSecondTimer.Stop()
         SixSecondTimer.Dispose()
-        OneMinuteTime.Stop()
-        OneMinuteTime.Dispose()
+        OneMinuteTimer.Stop()
+        OneMinuteTimer.Dispose()
         If My.Settings.PVReportingEnabled Then
             FiveMinuteTimer.Stop()
             FiveMinuteTimer.Dispose()
@@ -329,6 +332,8 @@ Public Class PowerwallService
                 DoTenMinuteTasks()
             End If
             If DailyTimer.Enabled = False Then
+                Dim InitialInterval As Double = (((23 - Now.Hour()) * 60) + (60 - Minute + 10)) * (60 * 1000) ' After Midnight
+                DailyTimer.Interval = InitialInterval
                 DailyTimer.Start()
                 EventLog.WriteEntry("Daily Timer Started", EventLogEntryType.Information, 112)
             End If
