@@ -500,7 +500,11 @@ Public Class PowerwallService
         If StandbyTargetSOC > 100 Then StandbyTargetSOC = 100
         NewTarget = CDec(IIf(My.Settings.PWOvernightStandby, StandbyTargetSOC, NoStandbyTargetSOC))
         If InvokedTime > Sunset And InvokedTime < OffPeakStart Then
-            If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Then Intent = "Planning to Charge" Else Intent = "No Charging Required"
+            If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Then
+                Intent = "Planning to Charge"
+            Else
+                Intent = "No Charging Required"
+            End If
         End If
         Try
             If InvokedTime > DateAdd(DateInterval.Minute, -15, PeakStart) And Not CurrentDayAllOffPeak And (PreCharging Or AboveMinBackup Or OnStandby) Then
@@ -561,7 +565,7 @@ Public Class PowerwallService
         If My.Settings.PBIChargeIntentEndpoint <> String.Empty Then
             Try
                 Dim PBIRows As New PBIChargeLogging With {.Rows = New List(Of ChargePlan)}
-                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = My.Settings.PWMorningBuffer, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .RemainingOffPeak = RemainingOffPeak * My.Settings.PWCapacity / 100, .Shortfall = ShortfallInsolation})
+                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = My.Settings.PWMorningBuffer, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .RemainingOffPeak = RemainingOffPeak * My.Settings.PWCapacity / 100, .Shortfall = ShortfallInsolation, .PeakConsumption = PeakConsumption})
                 Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBIChargeIntentEndpoint, PBIRows)
             Catch ex As Exception
                 EventLog.WriteEntry(String.Format("Failed to write Charge Plan to Power BI: Ex:{0} ({1})", ex.GetType, ex.Message), EventLogEntryType.Warning, 911)

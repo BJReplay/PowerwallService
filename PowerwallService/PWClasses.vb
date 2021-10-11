@@ -412,6 +412,7 @@ Public Class PowerBIStreaming
         Public Property AsAt As DateTime
         Public Property OperatingIntent As String
         Public Property RemainingInsolation As Single
+        Public Property PeakConsumption As Single
     End Class
 End Class
 
