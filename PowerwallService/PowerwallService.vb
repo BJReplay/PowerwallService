@@ -1249,7 +1249,7 @@ Public Class PowerwallService
             PostPowerBIStreamingData = response.StatusCode
             response.Close()
         Catch Ex As Exception
-            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+            EventLog.WriteEntry(String.Format("Failed to stream to Power BI: Ex:{0} ({1})", Ex.GetType, Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace), EventLogEntryType.Warning, 912)
             Return 0
         End Try
     End Function
