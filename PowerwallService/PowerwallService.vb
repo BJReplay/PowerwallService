@@ -456,10 +456,10 @@ Public Class PowerwallService
             RemainingOvernightRatio = 0
             RemainingInsolationToday = CurrentDayForecast.PVEstimate
             ForecastInsolationTomorrow = NextDayForecastGeneration
-            ShortfallInsolation = 0
+            ShortfallInsolation = PWPeakConsumption - RemainingInsolationToday
             Intent = "Sun is Up, Waiting for Peak"
         ElseIf InvokedTime > Sunrise And InvokedTime < Sunset Then
-            RemainingOvernightRatio = 1
+            RemainingOvernightRatio = 0
             RemainingInsolationToday = CurrentDayForecast.PVEstimate
             ForecastInsolationTomorrow = NextDayForecastGeneration
             ShortfallInsolation = 0
@@ -476,12 +476,6 @@ Public Class PowerwallService
             ForecastInsolationTomorrow = NextDayForecastGeneration
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Sun is Down, Waiting for Off Peak"
-            'ElseIf InvokedTime > Sunset And InvokedTime > OffPeakStart Then ' Suspect
-            '    RemainingOvernightRatio = 1
-            '    RemainingInsolationToday = 0
-            '    ForecastInsolationTomorrow = NextDayForecastGeneration
-            '    ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
-            '    Intent = "Sun is Down, Off Peak"
         ElseIf InvokedTime > OffPeakStart And InvokedTime < PeakStart Then
             RemainingOvernightRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, PeakStart) + 1) / OffPeakHours)
             If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
@@ -499,7 +493,7 @@ Public Class PowerwallService
         StandbyTargetSOC = My.Settings.PWMorningBuffer + (ShortfallInsolation / My.Settings.PWCapacity * 100)
         If StandbyTargetSOC > 100 Then StandbyTargetSOC = 100
         NewTarget = CDec(IIf(My.Settings.PWOvernightStandby, StandbyTargetSOC, NoStandbyTargetSOC))
-        If InvokedTime > Sunset And InvokedTime < OffPeakStart Then
+        If InvokedTime < OffPeakStart Then
             If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Then
                 Intent = "Planning to Charge"
             Else
