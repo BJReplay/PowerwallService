@@ -429,7 +429,7 @@ Public Class PowerwallService
             PeakConsumption = CInt(SPs.fnGetMonthlyPeakLoad(PeakStartHour:=PeakStartHour, PeakEndHour:=(OffPeakStartHour - 1)))
             EventLog.WriteEntry(String.Format("Peak Consumption Set To: {0}", PeakConsumption), EventLogEntryType.Information, 803)
         Catch ex As Exception
-            EventLog.WriteEntry(String.Format("Failed to get Peak Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 802)
+            EventLog.WriteEntry(String.Format("Failed to get Peak Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 804)
         End Try
     End Sub
 #End Region

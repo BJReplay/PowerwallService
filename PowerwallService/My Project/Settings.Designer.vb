@@ -174,7 +174,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("17500")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("9000")>  _
         Public ReadOnly Property PWPeakConsumption() As Integer
             Get
                 Return CType(Me("PWPeakConsumption"),Integer)
@@ -604,7 +604,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("17500")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("9000")>  _
         Public ReadOnly Property PWPeakConsumptionWeekend() As String
             Get
                 Return CType(Me("PWPeakConsumptionWeekend"),String)
