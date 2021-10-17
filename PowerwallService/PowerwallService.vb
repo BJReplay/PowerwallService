@@ -488,6 +488,7 @@ Public Class PowerwallService
         RemainingOffPeak = My.Settings.PWOvernightLoad * RemainingOvernightRatio
         RawTargetSOC = My.Settings.PWMorningBuffer + CInt(RemainingOffPeak)
         If ShortfallInsolation < 0 Then ShortfallInsolation = 0
+        ShortfallInsolation = ShortfallInsolation / My.Settings.PWRoundTripEfficiency
         NoStandbyTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
         If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
         StandbyTargetSOC = My.Settings.PWMorningBuffer + (ShortfallInsolation / My.Settings.PWCapacity * 100)
