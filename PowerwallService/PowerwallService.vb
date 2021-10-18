@@ -515,12 +515,12 @@ Public Class PowerwallService
                         PreCharging = False
                     End If
                 ElseIf Not My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And SOC.percentage <= NoStandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                    If SetPWMode("Morning SOC would be below required morning SOC, Standby Mode Not Enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
+                    If SetPWMode("Pre-Peak SOC would be below required SOC, Standby Mode Not Enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
                 ElseIf My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
-                    If SetPWMode("Current SOC above required morning SOC, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
+                    If SetPWMode("Current SOC above required Pre-Peak SOC, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
@@ -530,25 +530,25 @@ Public Class PowerwallService
                         PreCharging = False
                     End If
                 ElseIf (SOC.percentage < StandbyTargetSOC And OnStandby And Not (CurrentDayAllOffPeak Or NextDayAllDayOffPeak)) Or (SOC.percentage < NoStandbyTargetSOC And Not OnStandby And Not PreCharging And Not (CurrentDayAllOffPeak Or NextDayAllDayOffPeak)) Then
-                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 501)
-                    If SetPWMode("Current SOC below required morning SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
+                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Current SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 501)
+                    If SetPWMode("Current SOC below required Pre-Peak SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
                         PreCharging = True
                         OnStandby = False
                     End If
                 ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby And My.Settings.PWOvernightStandby Then
-                    EventLog.WriteEntry(String.Format("Current SOC above required setting and Standby Mode Enabled: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 505)
+                    EventLog.WriteEntry(String.Format("Current SOC above required setting and Standby Mode Enabled: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 505)
                     If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
                 ElseIf (LastTarget < NewTarget And OnStandby And Not (CurrentDayAllOffPeak Or NextDayAllDayOffPeak)) Or (LastTarget < NewTarget And PreCharging) Then
-                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
-                    If SetPWMode("Current SOC below required morning SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
+                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
+                    If SetPWMode("Current SOC below required Pre-Peak SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
                         PreCharging = True
                         OnStandby = False
                     End If
                 ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby Then
-                    EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
+                    EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
                     DoExitCharging(Intent)
                 End If
             Else
