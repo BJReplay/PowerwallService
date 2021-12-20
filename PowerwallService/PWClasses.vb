@@ -401,10 +401,6 @@ Public Class PowerBIStreaming
         Public Property Frequency As Single
         Public Property FrequencyMin As Single = 45.0
         Public Property FrequencyMax As Single = 55.0
-
-        Public Shared Widening Operator CType(v As SixSecondOb) As SixSecondOb
-            Throw New NotImplementedException()
-        End Operator
     End Class
     Public Class PBIChargeLogging
         Public Property Rows() As List(Of ChargePlan)
