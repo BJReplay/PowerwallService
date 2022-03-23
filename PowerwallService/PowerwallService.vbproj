@@ -48,10 +48,8 @@
     <OptionInfer>On</OptionInfer>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\packages\Newtonsoft.Json.13.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Configuration.Install" />
     <Reference Include="System.Data" />
     <Reference Include="System.Deployment" />
@@ -149,7 +147,6 @@
     <None Include="Docs\SAMPLE.PowerwallService.exe.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="packages.config" />
     <None Include="PWHistoryDataSet.xsc">
       <DependentUpon>PWHistoryDataSet.xsd</DependentUpon>
     </None>
@@ -193,8 +190,13 @@
     <Content Include="README.txt" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json">
+      <Version>13.0.1</Version>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\TeslaAuth\library\TeslaAuth.csproj">
-      <Project>{85c4b9a4-ce58-412a-ae77-2f082d835322}</Project>
+      <Project>{1fc6f11d-62b3-4f44-9015-fbb51fc5c36f}</Project>
       <Name>TeslaAuth</Name>
     </ProjectReference>
   </ItemGroup>

@@ -238,5 +238,8 @@
     <Setting Name="PWPeakConsumptionUseHistory" Type="System.Boolean" Scope="Application">
       <Value Profile="(Default)">False</Value>
     </Setting>
+    <Setting Name="PWCloudRefreshToken" Type="System.String" Scope="Application">
+      <Value Profile="(Default)" />
+    </Setting>
   </Settings>
 </SettingsFile>

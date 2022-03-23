@@ -736,6 +736,15 @@ Namespace My
                 Return CType(Me("PWPeakConsumptionUseHistory"),Boolean)
             End Get
         End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
+        Public ReadOnly Property PWCloudRefreshToken() As String
+            Get
+                Return CType(Me("PWCloudRefreshToken"),String)
+            End Get
+        End Property
     End Class
 End Namespace
 

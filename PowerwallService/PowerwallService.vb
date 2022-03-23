@@ -9,6 +9,7 @@ Imports PowerwallService.PVOutput
 Imports PowerwallService.SunriseSunset
 Imports PowerwallService.PowerBIStreaming
 Imports TeslaAuth
+Imports System.Configuration
 #End Region
 Public Class PowerwallService
 #Region "Variables"
@@ -42,6 +43,7 @@ Public Class PowerwallService
     Shared PWLocalToken As String = String.Empty
     Shared PWCloudToken As String = String.Empty
     Shared PWCloudRefreshToken As String = String.Empty
+    Shared PWCloudTokenExpires As DateTime = Now
     Shared NextDayForecastGeneration As Single = 0
     Shared NextDayMorningGeneration As Single = 0
     Shared MeterReading As MeterAggregates
@@ -156,6 +158,7 @@ Public Class PowerwallService
     End Sub
     Private Sub DoAsyncStartupProcesses()
         Threading.Thread.Sleep(10000)
+        GetSavedPWRefreshToken()
         SetOffPeakHours(Now)
         If My.Settings.PWUseAutonomous Then
             DischargeMode = autonomous
@@ -232,6 +235,34 @@ Public Class PowerwallService
     End Sub
 #End Region
 #Region "Miscellaneous Helpers"
+    Function ReadAppSetting(key As String) As String
+        Dim result As String = String.Empty
+        Try
+            Dim appSettings = ConfigurationManager.AppSettings
+            result = appSettings(key)
+            If IsNothing(result) Then
+                result = String.Empty
+            End If
+        Catch e As ConfigurationErrorsException
+            EventLog.WriteEntry(String.Format("Error Reading Generic Application Setting {0}: {1} - {2}", key, e.BareMessage, e.Source), EventLogEntryType.Warning, 907)
+        End Try
+        Return result
+    End Function
+    Sub AddUpdateAppSettings(key As String, value As String)
+        Try
+            Dim configFile = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None)
+            Dim settings = configFile.AppSettings.Settings
+            If IsNothing(settings(key)) Then
+                settings.Add(key, value)
+            Else
+                settings(key).Value = value
+            End If
+            configFile.Save(ConfigurationSaveMode.Modified)
+            ConfigurationManager.RefreshSection(configFile.AppSettings.SectionInformation.Name)
+        Catch e As ConfigurationErrorsException
+            EventLog.WriteEntry(String.Format("Error Writing Generic Application Setting {0} '{1}': {2} - {3}", key, value, e.BareMessage, e.Source), EventLogEntryType.Error, 908)
+        End Try
+    End Sub
     Sub SleepUntilSecBoundary(Boundary As Integer)
         Dim LastObs As Date = Now
         Dim MilliSeconds As Integer = LastObs.Millisecond
@@ -357,6 +388,9 @@ Public Class PowerwallService
         End If
     End Sub
     Private Sub DoTenMinuteTasks()
+        If Now > PWCloudTokenExpires Then
+            RefreshTokens()
+        End If
         SetOffPeakHours(Now)
         If Not FirstReadingsAvailable Then
             GetObservationAndStore()
@@ -384,7 +418,7 @@ Public Class PowerwallService
             End Try
             If response IsNot Nothing Then
                 Dim dataStream As Stream = response.GetResponseStream()
-                Dim reader As StreamReader = New StreamReader(dataStream)
+                Dim reader As New StreamReader(dataStream)
                 Dim responseFromServer As String = reader.ReadToEnd()
                 reader.Close()
                 response.Close()
@@ -488,7 +522,7 @@ Public Class PowerwallService
         RemainingOffPeak = My.Settings.PWOvernightLoad * RemainingOvernightRatio
         RawTargetSOC = My.Settings.PWMorningBuffer + CInt(RemainingOffPeak)
         If ShortfallInsolation < 0 Then ShortfallInsolation = 0
-        ShortfallInsolation = ShortfallInsolation / My.Settings.PWRoundTripEfficiency
+        ShortfallInsolation /= My.Settings.PWRoundTripEfficiency
         NoStandbyTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
         If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
         StandbyTargetSOC = My.Settings.PWMorningBuffer + (ShortfallInsolation / My.Settings.PWCapacity * 100)
@@ -686,7 +720,7 @@ Public Class PowerwallService
             Dim request As WebRequest = WebRequest.Create(String.Format(My.Settings.SolcastAddress, My.Settings.PVSystemLongitude, My.Settings.PVSystemLattitude, My.Settings.PVSystemCapacity, My.Settings.PVSystemTilt, My.Settings.PVSystemAzimuth, My.Settings.PVSystemInstallDate, My.Settings.SolcastAPIKey))
             Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
             Dim dataStream As Stream = response.GetResponseStream()
-            Dim reader As StreamReader = New StreamReader(dataStream)
+            Dim reader As New StreamReader(dataStream)
             responseFromServer = reader.ReadToEnd()
 
             If My.Settings.DualPVSystem Then
@@ -699,7 +733,7 @@ Public Class PowerwallService
                 Dim request2 As WebRequest = WebRequest.Create(String.Format(My.Settings.SolcastAddress, My.Settings.PVSystemLongitude, My.Settings.PVSystemLattitude, My.Settings.PVSystem2Capacity, My.Settings.PVSystem2Tilt, My.Settings.PVSystem2Azimuth, My.Settings.PVSystemInstallDate, My.Settings.SolcastAPIKey))
                 Dim response2 As HttpWebResponse = CType(request2.GetResponse(), HttpWebResponse)
                 Dim dataStream2 As Stream = response2.GetResponseStream()
-                Dim reader2 As StreamReader = New StreamReader(dataStream2)
+                Dim reader2 As New StreamReader(dataStream2)
                 responseFromServer2 = reader2.ReadToEnd()
                 Dim Results2 As OutputForecast = JsonConvert.DeserializeObject(Of OutputForecast)(responseFromServer2)
 
@@ -929,7 +963,7 @@ Public Class PowerwallService
                 End If
             End Try
             Dim dataStream As Stream = response.GetResponseStream()
-            Dim reader As StreamReader = New StreamReader(dataStream)
+            Dim reader As New StreamReader(dataStream)
             Dim responseFromServer As String = reader.ReadToEnd()
             GetPWCloudAPIResult = JsonConvert.DeserializeObject(Of JSONType)(responseFromServer)
             reader.Close()
@@ -967,7 +1001,7 @@ Public Class PowerwallService
                 End If
             End Try
             Dim dataStream As Stream = response.GetResponseStream()
-            Dim reader As StreamReader = New StreamReader(dataStream)
+            Dim reader As New StreamReader(dataStream)
             Dim responseFromServer As String = reader.ReadToEnd()
             PostPWCloudAPISettings = JsonConvert.DeserializeObject(Of CloudAPIResponse)(responseFromServer)
             reader.Close()
@@ -1003,7 +1037,7 @@ Public Class PowerwallService
                 PWLocalCookies = New CookieCollection
                 PWLocalCookies = response.Cookies
                 Dim dataStream As Stream = response.GetResponseStream()
-                Dim reader As StreamReader = New StreamReader(dataStream)
+                Dim reader As New StreamReader(dataStream)
                 Dim responseFromServer As String = reader.ReadToEnd()
                 Dim LoginResult As LoginResult = JsonConvert.DeserializeObject(Of LoginResult)(responseFromServer)
                 PWLocalToken = LoginResult.token
@@ -1015,20 +1049,45 @@ Public Class PowerwallService
         End If
         Return PWLocalToken
     End Function
-    Function LoginPWCloud(Optional ForceReLogin As Boolean = False) As String
+    Sub GetSavedPWRefreshToken()
+        Dim LocalRefreshToken As String = ReadAppSetting("PWCloudRefreshToken")
+        If LocalRefreshToken <> String.Empty Then
+            PWCloudRefreshToken = LocalRefreshToken
+        End If
+        If LocalRefreshToken = String.Empty And My.Settings.PWCloudRefreshToken <> String.Empty Then
+            LocalRefreshToken = My.Settings.PWCloudRefreshToken
+        End If
+        If LocalRefreshToken <> String.Empty Then
+            PWCloudRefreshToken = LocalRefreshToken
+        End If
+        If PWCloudRefreshToken <> String.Empty Then
+            RefreshTokens()
+        End If
+        Dim LocalPWCloudToken As String = ReadAppSetting("PWCloudToken")
+        If LocalPWCloudToken <> String.Empty Then
+            PWCloudToken = LocalPWCloudToken
+        End If
         If PWCloudToken = String.Empty Then
             If My.Settings.PWCloudToken <> String.Empty Then
                 PWCloudToken = My.Settings.PWCloudToken
                 EventLog.WriteEntry(String.Format("Skipping Cloud Login: Found Settings Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 904)
             End If
         End If
+    End Sub
+    Function LoginPWCloud(Optional ForceReLogin As Boolean = False) As String
         If PWCloudToken = String.Empty Or ForceReLogin = True Then
             Try
+                PWCloudTokenExpires = DateAdd(DateInterval.Minute, -10, Now)
                 Dim AuthHelper As New TeslaAuthHelper(String.Format("PowerwallService/{0}", My.Application.Info.Version.ToString))
                 PWCloudRefreshToken = AuthHelper.AuthenticateAsync(My.Settings.PWCloudEmail, My.Settings.PWCloudPassword, My.Settings.PWCloudMFARecoveryToken).Result.RefreshToken
-                With AuthHelper.RefreshTokenAsync(PWCloudRefreshToken, TeslaAccountRegion.Unknown).Result
+                With AuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result
                     PWCloudToken = .AccessToken
                     PWCloudRefreshToken = .RefreshToken
+                    PWCloudTokenExpires += .ExpiresIn
+
+                    AddUpdateAppSettings("PWCloudToken", PWCloudToken)
+                    AddUpdateAppSettings("PWCloudRefreshToken", PWCloudRefreshToken)
+
                 End With
                 EventLog.WriteEntry(String.Format("Initial Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 900)
                 EventLog.WriteEntry(String.Format("Initial Refresh Token: {0}", PWCloudRefreshToken), EventLogEntryType.Information, 901)
@@ -1066,7 +1125,7 @@ Public Class PowerwallService
             End Try
             If response IsNot Nothing Then
                 Dim dataStream As Stream = response.GetResponseStream()
-                Dim reader As StreamReader = New StreamReader(dataStream)
+                Dim reader As New StreamReader(dataStream)
                 Dim responseFromServer As String = reader.ReadToEnd()
                 reader.Close()
                 response.Close()
@@ -1079,15 +1138,25 @@ Public Class PowerwallService
     End Function
     Private Sub RefreshTokens()
         If PWCloudRefreshToken <> String.Empty Then
-            Dim AuthHelper As New TeslaAuthHelper(String.Format("PowerwallService/{0}", My.Application.Info.Version.ToString))
-            With AuthHelper.RefreshTokenAsync(PWCloudRefreshToken, TeslaAccountRegion.Unknown).Result
-                PWCloudToken = .AccessToken
-                PWCloudRefreshToken = .RefreshToken
-            End With
-            EventLog.WriteEntry(String.Format("Refreshed Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 902)
-            EventLog.WriteEntry(String.Format("Refreshed Refresh Token: {0}", PWCloudRefreshToken), EventLogEntryType.Information, 903)
+            Try
+                PWCloudTokenExpires = DateAdd(DateInterval.Hour, -1, Now)
+                Dim AuthHelper As New TeslaAuthHelper(String.Format("PowerwallService/{0}", My.Application.Info.Version.ToString))
+                With AuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result
+                    PWCloudToken = .AccessToken
+                    PWCloudRefreshToken = .RefreshToken
+                    PWCloudTokenExpires += .ExpiresIn
+
+                    AddUpdateAppSettings("PWCloudToken", PWCloudToken)
+                    AddUpdateAppSettings("PWCloudRefreshToken", PWCloudRefreshToken)
+
+                End With
+                EventLog.WriteEntry(String.Format("Refreshed Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 902)
+                EventLog.WriteEntry(String.Format("Refreshed Refresh Token: {0}", PWCloudRefreshToken), EventLogEntryType.Information, 903)
+            Catch ex As Exception
+                EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
+            End Try
         Else
-            EventLog.WriteEntry(String.Format("No Refresh Token available, using existing Access Token", PWCloudToken), EventLogEntryType.Information, 905)
+            EventLog.WriteEntry(String.Format("No Refresh Token available, attempting using existing Access Token {0}", PWCloudToken), EventLogEntryType.Information, 905)
         End If
     End Sub
 #End Region
@@ -1199,7 +1268,7 @@ Public Class PowerwallService
             Dim request As WebRequest = WebRequest.Create(String.Format("https://pvoutput.org/service/r2/getstatus.jsp?d={0:yyyyMMdd}&h=1&ext=1&asc=1&limit=288&sid={1}&key={2}", OutputDate, My.Settings.PVOutputSID, My.Settings.PVOutputAPIKey))
             Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
             Dim dataStream As Stream = response.GetResponseStream()
-            Dim reader As StreamReader = New StreamReader(dataStream)
+            Dim reader As New StreamReader(dataStream)
             Dim responseFromServer As String = reader.ReadToEnd()
             reader.Close()
             response.Close()
