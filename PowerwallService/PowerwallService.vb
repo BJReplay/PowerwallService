@@ -460,8 +460,10 @@ Public Class PowerwallService
     Private Sub GetPeakConsumption()
         PeakConsumption = 0
         Try
-            PeakConsumption = CInt(SPs.fnGetMonthlyPeakLoad(PeakStartHour:=PeakStartHour, PeakEndHour:=(OffPeakStartHour - 1)))
-            EventLog.WriteEntry(String.Format("Peak Consumption Set To: {0}", PeakConsumption), EventLogEntryType.Information, 803)
+            If My.Settings.PWPeakConsumptionUseHistory Then
+                PeakConsumption = CInt(SPs.fnGetMonthlyPeakLoad(PeakStartHour:=PeakStartHour, PeakEndHour:=(OffPeakStartHour - 1)))
+                EventLog.WriteEntry(String.Format("Peak Consumption Set To: {0}", PeakConsumption), EventLogEntryType.Information, 803)
+            End If
         Catch ex As Exception
             EventLog.WriteEntry(String.Format("Failed to get Peak Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 804)
         End Try
