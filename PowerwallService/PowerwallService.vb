@@ -128,6 +128,10 @@ Public Class PowerwallService
     Protected Overrides Sub OnStart(ByVal args() As String)
         EventLog.WriteEntry("Powerwall Service Starting", EventLogEntryType.Information, 100)
 
+        If My.Settings.IgnoreCertificates Then
+            System.Net.ServicePointManager.ServerCertificateValidationCallback = Function(se As Object, cert As System.Security.Cryptography.X509Certificates.X509Certificate, chain As System.Security.Cryptography.X509Certificates.X509Chain, sslerror As System.Net.Security.SslPolicyErrors) True
+        End If
+
         SixSecondTimer.Interval = 6 * 1000 ' Every Six Seconds
         SixSecondTimer.AutoReset = True
         AddHandler SixSecondTimer.Elapsed, AddressOf OnSixSecondTimer
