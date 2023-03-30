@@ -82,6 +82,7 @@ Public Class PowerwallService
     Shared PWCloudEnergyID As Long
     Shared PWCloudSiteID As String
     Shared PeakConsumption As Integer = 0
+    Shared OvernightConsumption As Integer = 0
 #End Region
 #Region "Timer Handlers"
     Protected Async Sub OnSixSecondTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
@@ -465,11 +466,22 @@ Public Class PowerwallService
         PeakConsumption = 0
         Try
             If My.Settings.PWPeakConsumptionUseHistory Then
-                PeakConsumption = CInt(SPs.fnGetMonthlyPeakLoad(PeakStartHour:=PeakStartHour, PeakEndHour:=(OffPeakStartHour - 1)))
+                PeakConsumption = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=PeakStartHour, PeriodEndHour:=(OffPeakStartHour - 1)))
                 EventLog.WriteEntry(String.Format("Peak Consumption Set To: {0}", PeakConsumption), EventLogEntryType.Information, 803)
             End If
         Catch ex As Exception
             EventLog.WriteEntry(String.Format("Failed to get Peak Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 804)
+        End Try
+    End Sub
+    Private Sub GetOvernightConsumption()
+        OvernightConsumption = 0
+        Try
+            If My.Settings.PWOvernightConsumptionUseHistory Then
+                OvernightConsumption = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=OffPeakStartHour, PeriodEndHour:=Sunrise.Hour))
+                EventLog.WriteEntry(String.Format("Overnight Consumption Set To: {0}", OvernightConsumption), EventLogEntryType.Information, 805)
+            End If
+        Catch ex As Exception
+            EventLog.WriteEntry(String.Format("Failed to get Overnight Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 806)
         End Try
     End Sub
 #End Region
@@ -484,6 +496,7 @@ Public Class PowerwallService
         Dim RemainingInsolationToday As Single
         Dim ForecastInsolationTomorrow As Single
         Dim PWPeakConsumption As Integer = CInt(IIf(CurrentDOW = DayOfWeek.Saturday Or CurrentDOW = DayOfWeek.Sunday, My.Settings.PWPeakConsumptionWeekend, My.Settings.PWPeakConsumption))
+        Dim RawOffPeak As Single
         Dim RemainingOffPeak As Single
         Dim Intent As String = "Thinking"
         Dim NewTarget As Decimal = 0
@@ -491,6 +504,13 @@ Public Class PowerwallService
             If PeakConsumption > 0 Then
                 PWPeakConsumption = PeakConsumption
             End If
+        End If
+        If My.Settings.PWOvernightConsumptionUseHistory Then
+            If OvernightConsumption > 0 Then
+                RawOffPeak = OvernightConsumption
+            End If
+        Else
+            RawOffPeak = My.Settings.PWOvernightLoad
         End If
         PWPeakConsumption += CInt(My.Settings.PWMinBackupPercentage * My.Settings.PWCapacity / 100)
         If InvokedTime > Sunrise And InvokedTime < Sunset And InvokedTime < PeakStart Then
@@ -526,7 +546,7 @@ Public Class PowerwallService
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Monitoring"
         End If
-        RemainingOffPeak = My.Settings.PWOvernightLoad * RemainingOvernightRatio
+        RemainingOffPeak = RawOffPeak * RemainingOvernightRatio
         RawTargetSOC = My.Settings.PWMorningBuffer + CInt(RemainingOffPeak)
         If ShortfallInsolation < 0 Then ShortfallInsolation = 0
         ShortfallInsolation /= My.Settings.PWRoundTripEfficiency
