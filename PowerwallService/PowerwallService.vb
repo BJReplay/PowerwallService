@@ -173,6 +173,7 @@ Public Class PowerwallService
         GetCloudProducts()
         GetCloudPWMode()
         GetPeakConsumption()
+        GetOvernightConsumption()
 
         If My.Settings.PWForceModeOnStartup Then
             Dim Intent As String = "Thinking"
