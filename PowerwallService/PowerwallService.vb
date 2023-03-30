@@ -506,12 +506,11 @@ Public Class PowerwallService
                 PWPeakConsumption = PeakConsumption
             End If
         End If
+        RawOffPeak = My.Settings.PWOvernightLoad
         If My.Settings.PWOvernightConsumptionUseHistory Then
             If OvernightConsumption > 0 Then
                 RawOffPeak = OvernightConsumption
             End If
-        Else
-            RawOffPeak = My.Settings.PWOvernightLoad
         End If
         PWPeakConsumption += CInt(My.Settings.PWMinBackupPercentage * My.Settings.PWCapacity / 100)
         If InvokedTime > Sunrise And InvokedTime < Sunset And InvokedTime < PeakStart Then
@@ -548,7 +547,8 @@ Public Class PowerwallService
             Intent = "Monitoring"
         End If
         RemainingOffPeak = RawOffPeak * RemainingOvernightRatio
-        RawTargetSOC = My.Settings.PWMorningBuffer + CInt(RemainingOffPeak)
+        RawTargetSOC = CInt((My.Settings.PWMorningBuffer + RemainingOffPeak) / My.Settings.PWCapacity) * 100
+        If RawTargetSOC > 100 Then RawTargetSOC = 100
         If ShortfallInsolation < 0 Then ShortfallInsolation = 0
         ShortfallInsolation /= My.Settings.PWRoundTripEfficiency
         NoStandbyTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
@@ -571,7 +571,7 @@ Public Class PowerwallService
             ElseIf (InvokedTime >= OffPeakStart And InvokedTime < PeakStart And InvokedTime > OperationLockout) Then
                 If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Minimum required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 500)
                 If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OffPeakStart, PeakStart), EventLogEntryType.Information, 714)
-                If NextDayAllDayOffPeak And (My.Settings.PWOvernightStandby Or My.Settings.PWWeekendStandbyOnTarget) And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                If NextDayAllDayOffPeak And (My.Settings.PWOvernightStandby Or My.Settings.PWWeekendStandbyOnTarget) And InvokedTime >= Sunset And (Not OnStandby Or SOC.percentage > LastTarget) Then
                     If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
@@ -581,12 +581,12 @@ Public Class PowerwallService
                         OnStandby = True
                         PreCharging = False
                     End If
-                ElseIf My.Settings.PWOvernightStandby And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                ElseIf My.Settings.PWOvernightStandby And InvokedTime >= Sunset And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
                     If SetPWMode("Current SOC above required Pre-Peak SOC, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
-                ElseIf My.Settings.PWWeekendStandbyOnTarget And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And CurrentDayAllOffPeak And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                ElseIf My.Settings.PWWeekendStandbyOnTarget And InvokedTime >= Sunset And SOC.percentage >= My.Settings.PWWeekendStandbyTarget And CurrentDayAllOffPeak And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
                     If SetPWMode("Current SOC above weekend target, standby on target enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
@@ -597,7 +597,7 @@ Public Class PowerwallService
                         PreCharging = True
                         OnStandby = False
                     End If
-                ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby And My.Settings.PWOvernightStandby Then
+                ElseIf SOC.percentage >= NoStandbyTargetSOC And PreCharging And Not OnStandby And My.Settings.PWOvernightStandby And InvokedTime >= Sunset Then
                     EventLog.WriteEntry(String.Format("Current SOC above required setting and Standby Mode Enabled: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 505)
                     If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
@@ -622,7 +622,7 @@ Public Class PowerwallService
         If My.Settings.PBIChargeIntentEndpoint <> String.Empty Then
             Try
                 Dim PBIRows As New PBIChargeLogging With {.Rows = New List(Of ChargePlan)}
-                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = My.Settings.PWMorningBuffer, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .RemainingOffPeak = RemainingOffPeak * My.Settings.PWCapacity / 100, .Shortfall = ShortfallInsolation, .PeakConsumption = PeakConsumption})
+                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = My.Settings.PWMorningBuffer, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .RemainingOffPeak = RemainingOffPeak, .Shortfall = ShortfallInsolation, .PeakConsumption = PeakConsumption})
                 Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBIChargeIntentEndpoint, PBIRows)
             Catch ex As Exception
                 EventLog.WriteEntry(String.Format("Failed to write Charge Plan to Power BI: Ex:{0} ({1})", ex.GetType, ex.Message), EventLogEntryType.Warning, 911)
