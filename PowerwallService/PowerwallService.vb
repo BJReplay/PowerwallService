@@ -512,40 +512,40 @@ Public Class PowerwallService
                 RawOffPeak = OvernightConsumption
             End If
         End If
+        If InvokedTime <= Sunrise Then
+            RemainingInsolationToday = CurrentDayForecast.PVEstimate
+            ForecastInsolationTomorrow = NextDayForecastGeneration
+        ElseIf InvokedTime > Sunrise And InvokedTime <= Sunset Then
+            RemainingInsolationToday = CurrentDayForecast.PVEstimate
+            ForecastInsolationTomorrow = NextDayForecastGeneration
+        ElseIf InvokedTime > Sunset Then
+            RemainingInsolationToday = 0
+            ForecastInsolationTomorrow = NextDayForecastGeneration
+        End If
         PWPeakConsumption += CInt(My.Settings.PWMinBackupPercentage * My.Settings.PWCapacity / 100)
         If InvokedTime > Sunrise And InvokedTime < Sunset And InvokedTime < PeakStart Then
             RemainingOvernightRatio = 0
-            RemainingInsolationToday = CurrentDayForecast.PVEstimate
-            ForecastInsolationTomorrow = NextDayForecastGeneration
             ShortfallInsolation = PWPeakConsumption - RemainingInsolationToday
             Intent = "Sun is Up, Waiting for Peak"
         ElseIf InvokedTime > Sunrise And InvokedTime < Sunset Then
             RemainingOvernightRatio = 0
-            RemainingInsolationToday = CurrentDayForecast.PVEstimate
-            ForecastInsolationTomorrow = NextDayForecastGeneration
             ShortfallInsolation = 0
             Intent = "Sun is Up, In Peak"
         ElseIf InvokedTime > PeakStart And InvokedTime < Sunrise Then
             RemainingOvernightRatio = 0
-            RemainingInsolationToday = CurrentDayForecast.PVEstimate
-            ForecastInsolationTomorrow = NextDayForecastGeneration
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Waiting for Sunrise, In Peak"
         ElseIf InvokedTime > Sunset And InvokedTime < OffPeakStart Then
             RemainingOvernightRatio = 1
-            RemainingInsolationToday = 0
-            ForecastInsolationTomorrow = NextDayForecastGeneration
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Sun is Down, Waiting for Off Peak"
         ElseIf InvokedTime > OffPeakStart And InvokedTime < PeakStart Then
             RemainingOvernightRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, PeakStart) + 1) / OffPeakHours)
             If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
             If RemainingOvernightRatio > 1 Then RemainingOvernightRatio = 1
-            RemainingInsolationToday = NextDayForecastGeneration
-            ForecastInsolationTomorrow = 0
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Monitoring"
-        End If
+            End If
         RemainingOffPeak = RawOffPeak * RemainingOvernightRatio
         RawTargetSOC = CInt((My.Settings.PWMorningBuffer + RemainingOffPeak) / My.Settings.PWCapacity) * 100
         If RawTargetSOC > 100 Then RawTargetSOC = 100
@@ -638,7 +638,7 @@ Public Class PowerwallService
                 SecondDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 2, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
             End If
             Dim NewForecastsRetrieved As Boolean = False
-            If DateAdd(DateInterval.Hour, 1, ForecastsRetrieved) < InvokedTime And InvokedTime.Hour < (Sunset.Hour + 1) Then
+            If DateAdd(DateInterval.Hour, 1, ForecastsRetrieved) < InvokedTime) Then
                 PVForecast = GetSolCastResult(Of OutputForecast)()
                 If PVForecast IsNot Nothing Then
                     ForecastsRetrieved = InvokedTime
