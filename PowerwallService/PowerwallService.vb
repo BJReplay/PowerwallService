@@ -638,7 +638,7 @@ Public Class PowerwallService
                 SecondDayForecast = New DayForecast With {.ForecastDate = DateAdd(DateInterval.Day, 2, Now.Date), .PVEstimate = 0, .MorningForecast = 0}
             End If
             Dim NewForecastsRetrieved As Boolean = False
-            If DateAdd(DateInterval.Hour, 1, ForecastsRetrieved) < InvokedTime) Then
+            If DateAdd(DateInterval.Hour, 1, ForecastsRetrieved) < InvokedTime Then
                 PVForecast = GetSolCastResult(Of OutputForecast)()
                 If PVForecast IsNot Nothing Then
                     ForecastsRetrieved = InvokedTime
