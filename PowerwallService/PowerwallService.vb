@@ -581,7 +581,7 @@ Public Class PowerwallService
                         OnStandby = True
                         PreCharging = False
                     End If
-                ElseIf My.Settings.PWOvernightStandby And InvokedTime >= Sunset And SOC.percentage >= StandbyTargetSOC And SOC.percentage <= NoStandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                ElseIf My.Settings.PWOvernightStandby And InvokedTime >= Sunset And SOC.percentage >= StandbyTargetSOC And Not PreCharging And (Not OnStandby Or SOC.percentage > LastTarget) Then
                     If SetPWMode("Current SOC above required Pre-Peak SOC, Standby Mode Enabled, After Sunset", "Enter", "Standby", SOC.percentage, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
@@ -686,17 +686,10 @@ Public Class PowerwallService
                     ForecastLogEntry += vbCrLf & String.Format("Date: {0:yyyy-MM-dd} Total: {1} Morning: {2}", .ForecastDate, .PVEstimate, .MorningForecast)
                 End With
                 EventLog.WriteEntry(ForecastLogEntry, EventLogEntryType.Information, 1000)
-                If InvokedTime.Hour >= 0 And InvokedTime.Hour < PeakStartHour Then
-                    With CurrentDayForecast
-                        NextDayForecastGeneration = .PVEstimate
-                        NextDayMorningGeneration = .MorningForecast
-                    End With
-                Else
-                    With NextDayForecast
-                        NextDayForecastGeneration = .PVEstimate
-                        NextDayMorningGeneration = .MorningForecast
-                    End With
-                End If
+                With NextDayForecast
+                    NextDayForecastGeneration = .PVEstimate
+                    NextDayMorningGeneration = .MorningForecast
+                End With
             End If
         Catch Ex As Exception
             EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
