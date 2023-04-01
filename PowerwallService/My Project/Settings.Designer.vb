@@ -174,7 +174,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("9000")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("5000")>  _
         Public ReadOnly Property PWPeakConsumption() As Integer
             Get
                 Return CType(Me("PWPeakConsumption"),Integer)
@@ -331,29 +331,6 @@ Namespace My
         Public ReadOnly Property PWMinBackupPercentage() As Integer
             Get
                 Return CType(Me("PWMinBackupPercentage"),Integer)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.ConnectionString),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("Server=tcp:TODO.database.windows.net,1433;Initial Catalog=PWHistory;Persist Secur"& _ 
-            "ity Info=True;User ID=TODO;Password=TODO;MultipleActiveResultSets=False;Encrypt="& _ 
-            "True;TrustServerCertificate=False;Connection Timeout=30;")>  _
-        Public ReadOnly Property PWHistory() As String
-            Get
-                Return CType(Me("PWHistory"),String)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.ConnectionString),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("Data Source=TODO;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TOD"& _ 
-            "O;Password=TODO")>  _
-        Public ReadOnly Property PWHistoryLocal() As String
-            Get
-                Return CType(Me("PWHistoryLocal"),String)
             End Get
         End Property
         
@@ -559,25 +536,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("70")>  _
-        Public ReadOnly Property PWWeekendStandbyTarget() As Byte
-            Get
-                Return CType(Me("PWWeekendStandbyTarget"),Byte)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
-        Public ReadOnly Property PWWeekendStandbyOnTarget() As Boolean
-            Get
-                Return CType(Me("PWWeekendStandbyOnTarget"),Boolean)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("9000")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("5000")>  _
         Public ReadOnly Property PWPeakConsumptionWeekend() As String
             Get
                 Return CType(Me("PWPeakConsumptionWeekend"),String)
@@ -703,7 +662,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
         Public ReadOnly Property PWPeakConsumptionUseHistory() As Boolean
             Get
                 Return CType(Me("PWPeakConsumptionUseHistory"),Boolean)
@@ -730,10 +689,33 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
         Public ReadOnly Property PWOvernightConsumptionUseHistory() As Boolean
             Get
                 Return CType(Me("PWOvernightConsumptionUseHistory"),Boolean)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.ConnectionString),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("Server=tcp:TODO.database.windows.net,1433;Initial Catalog=PWHistory;Persist Secur"& _ 
+            "ity Info=True;User ID=TODO;Password=TODO;MultipleActiveResultSets=False;Encrypt="& _ 
+            "True;TrustServerCertificate=False;Connection Timeout=30;")>  _
+        Public ReadOnly Property PWHistory() As String
+            Get
+                Return CType(Me("PWHistory"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.ConnectionString),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("Data Source=TODO;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TOD"& _ 
+            "O;Password=TODO")>  _
+        Public ReadOnly Property PWHistoryLocal() As String
+            Get
+                Return CType(Me("PWHistoryLocal"),String)
             End Get
         End Property
     End Class
