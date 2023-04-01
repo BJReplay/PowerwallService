@@ -219,52 +219,25 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
-        Public ReadOnly Property TariffPeakOnWeekends() As Boolean
+         Global.System.Configuration.DefaultSettingValueAttribute("15")>  _
+        Public ReadOnly Property TariffPeakStart() As Integer
             Get
-                Return CType(Me("TariffPeakOnWeekends"),Boolean)
+                Return CType(Me("TariffPeakStart"),Integer)
             End Get
         End Property
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("7")>  _
-        Public ReadOnly Property TariffPeakStartWeekday() As Integer
+         Global.System.Configuration.DefaultSettingValueAttribute("22")>  _
+        Public ReadOnly Property TariffPeakEnd() As Integer
             Get
-                Return CType(Me("TariffPeakStartWeekday"),Integer)
+                Return CType(Me("TariffPeakEnd"),Integer)
             End Get
         End Property
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("0")>  _
-        Public ReadOnly Property TariffPeakEndWeekday() As Integer
-            Get
-                Return CType(Me("TariffPeakEndWeekday"),Integer)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("0")>  _
-        Public ReadOnly Property TariffPeakStartWeekend() As Integer
-            Get
-                Return CType(Me("TariffPeakStartWeekend"),Integer)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("0")>  _
-        Public ReadOnly Property TariffPeakEndWeekend() As Integer
-            Get
-                Return CType(Me("TariffPeakEndWeekend"),Integer)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("20.68")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("32")>  _
         Public ReadOnly Property TariffPeakRate() As Single
             Get
                 Return CType(Me("TariffPeakRate"),Single)
@@ -273,7 +246,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("10.34")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("19")>  _
         Public ReadOnly Property TariffOffPeakRate() As Single
             Get
                 Return CType(Me("TariffOffPeakRate"),Single)
@@ -282,7 +255,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("11.3")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("5.2")>  _
         Public ReadOnly Property TariffFeedInRate() As Single
             Get
                 Return CType(Me("TariffFeedInRate"),Single)

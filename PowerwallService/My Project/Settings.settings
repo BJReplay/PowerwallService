@@ -56,29 +56,20 @@
     <Setting Name="TariffIgnoresDST" Type="System.Boolean" Scope="Application">
       <Value Profile="(Default)">True</Value>
     </Setting>
-    <Setting Name="TariffPeakOnWeekends" Type="System.Boolean" Scope="Application">
-      <Value Profile="(Default)">False</Value>
+    <Setting Name="TariffPeakStart" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">15</Value>
     </Setting>
-    <Setting Name="TariffPeakStartWeekday" Type="System.Int32" Scope="Application">
-      <Value Profile="(Default)">7</Value>
-    </Setting>
-    <Setting Name="TariffPeakEndWeekday" Type="System.Int32" Scope="Application">
-      <Value Profile="(Default)">0</Value>
-    </Setting>
-    <Setting Name="TariffPeakStartWeekend" Type="System.Int32" Scope="Application">
-      <Value Profile="(Default)">0</Value>
-    </Setting>
-    <Setting Name="TariffPeakEndWeekend" Type="System.Int32" Scope="Application">
-      <Value Profile="(Default)">0</Value>
+    <Setting Name="TariffPeakEnd" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">22</Value>
     </Setting>
     <Setting Name="TariffPeakRate" Type="System.Single" Scope="Application">
-      <Value Profile="(Default)">20.68</Value>
+      <Value Profile="(Default)">32</Value>
     </Setting>
     <Setting Name="TariffOffPeakRate" Type="System.Single" Scope="Application">
-      <Value Profile="(Default)">10.34</Value>
+      <Value Profile="(Default)">19</Value>
     </Setting>
     <Setting Name="TariffFeedInRate" Type="System.Single" Scope="Application">
-      <Value Profile="(Default)">11.3</Value>
+      <Value Profile="(Default)">5.2</Value>
     </Setting>
     <Setting Name="PWRoundTripEfficiency" Type="System.Decimal" Scope="Application">
       <Value Profile="(Default)">0.85</Value>
