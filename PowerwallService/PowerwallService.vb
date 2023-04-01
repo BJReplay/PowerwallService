@@ -480,11 +480,13 @@ Public Class PowerwallService
         Dim NoStandbyTargetSOC As Single = 0
         Dim StandbyTargetSOC As Single = 0
         Dim RemainingOvernightRatio As Single
+        Dim RemainingPeakRatio As Single = 1
         Dim RemainingInsolationToday As Single
         Dim ForecastInsolationTomorrow As Single
         Dim PWPeakConsumption As Integer
         Dim RawOffPeak As Single
-        Dim RemainingOffPeak As Single
+        Dim InPeak As Boolean = False
+        Dim RemainingOffPeak As Single = 1
         Dim Intent As String = "Thinking"
         Dim NewTarget As Decimal = 0
         PWPeakConsumption = CInt(IIf(CurrentDOW = DayOfWeek.Saturday Or CurrentDOW = DayOfWeek.Sunday, My.Settings.PWPeakConsumptionWeekend, My.Settings.PWPeakConsumption))
@@ -514,13 +516,16 @@ Public Class PowerwallService
         ElseIf InvokedTime > Sunrise And InvokedTime < Sunset Then
             RemainingOvernightRatio = 1
             ShortfallInsolation = 0
+            InPeak = True
             Intent = "Sun is Up, In Peak"
         ElseIf InvokedTime > PeakStart And InvokedTime < Sunrise Then
             RemainingOvernightRatio = 0
+            InPeak = True
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Waiting for Sunrise, In Peak"
         ElseIf InvokedTime > Sunset And InvokedTime < OffPeakStart Then
             RemainingOvernightRatio = 1
+            InPeak = True
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Sun is Down, Waiting for Off Peak"
         ElseIf InvokedTime > OffPeakStart And InvokedTime < PeakStart Then
@@ -529,7 +534,13 @@ Public Class PowerwallService
             If RemainingOvernightRatio > 1 Then RemainingOvernightRatio = 1
             ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
             Intent = "Monitoring"
-            End If
+        End If
+        If InPeak Then
+            RemainingPeakRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, OffPeakStart) + 1) / (24 - OffPeakHours))
+            If RemainingPeakRatio < 0 Then RemainingPeakRatio = 0
+            If RemainingPeakRatio > 1 Then RemainingPeakRatio = 1
+        End If
+        PWPeakConsumption = CInt(CSng(PWPeakConsumption) * RemainingPeakRatio)
         RemainingOffPeak = RawOffPeak * RemainingOvernightRatio
         RawTargetSOC = CInt((My.Settings.PWMorningBuffer + RemainingOffPeak) / My.Settings.PWCapacity) * 100
         If RawTargetSOC > 100 Then RawTargetSOC = 100
@@ -601,7 +612,7 @@ Public Class PowerwallService
         If My.Settings.PBIChargeIntentEndpoint <> String.Empty Then
             Try
                 Dim PBIRows As New PBIChargeLogging With {.Rows = New List(Of ChargePlan)}
-                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = My.Settings.PWMorningBuffer, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .RemainingOffPeak = RemainingOffPeak, .Shortfall = ShortfallInsolation, .PeakConsumption = PeakConsumption})
+                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = My.Settings.PWMorningBuffer, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .RemainingOffPeak = RemainingOffPeak, .Shortfall = ShortfallInsolation, .PeakConsumption = PWPeakConsumption})
                 Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBIChargeIntentEndpoint, PBIRows)
             Catch ex As Exception
                 EventLog.WriteEntry(String.Format("Failed to write Charge Plan to Power BI: Ex:{0} ({1})", ex.GetType, ex.Message), EventLogEntryType.Warning, 911)
