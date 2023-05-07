@@ -83,6 +83,7 @@ Public Class PowerwallService
     Shared PWCloudSiteID As String
     Shared PeakConsumption As Integer = 0
     Shared OvernightConsumption As Integer = 0
+    Shared ConsumptionToPeakStart As Integer = 0
 #End Region
 #Region "Timer Handlers"
     Protected Async Sub OnSixSecondTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
@@ -174,6 +175,7 @@ Public Class PowerwallService
         GetCloudPWMode()
         GetPeakConsumption()
         GetOvernightConsumption()
+        GetConsumptionToPeakStart()
 
         If My.Settings.PWForceModeOnStartup Then
             Dim Intent As String = "Thinking"
@@ -471,6 +473,18 @@ Public Class PowerwallService
             EventLog.WriteEntry(String.Format("Failed to get Overnight Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 806)
         End Try
     End Sub
+    Private Sub GetConsumptionToPeakStart()
+        ConsumptionToPeakStart = 0
+        Dim NowHour As Integer = Now.Hour()
+        Try
+            If My.Settings.PWConsumptionToPeakStartUseHistory Then
+                ConsumptionToPeakStart = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=NowHour, PeriodEndHour:=PeakStartHour))
+                EventLog.WriteEntry(String.Format("OffPeak to Peak Start Consumption Set To: {0}", ConsumptionToPeakStart), EventLogEntryType.Information, 807)
+            End If
+        Catch ex As Exception
+            EventLog.WriteEntry(String.Format("Failed to get OffPeak to Peak Start Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 808)
+        End Try
+    End Sub
 #End Region
 #Region "Forecasts and Targets"
     Sub CheckSOCLevel()
@@ -489,6 +503,7 @@ Public Class PowerwallService
         Dim RemainingOffPeak As Single = 1
         Dim Intent As String = "Thinking"
         Dim NewTarget As Decimal = 0
+        Dim RemainingToPeak As Integer = 0
         PWPeakConsumption = CInt(IIf(CurrentDOW = DayOfWeek.Saturday Or CurrentDOW = DayOfWeek.Sunday, My.Settings.PWPeakConsumptionWeekend, My.Settings.PWPeakConsumption))
         If My.Settings.PWPeakConsumptionUseHistory Then
             If PeakConsumption > 0 Then
@@ -501,6 +516,11 @@ Public Class PowerwallService
                 RawOffPeak = OvernightConsumption
             End If
         End If
+        If My.Settings.PWConsumptionToPeakStartUseHistory Then
+            GetConsumptionToPeakStart()
+            RemainingToPeak = ConsumptionToPeakStart
+        End If
+        RawOffPeak += RemainingToPeak
         If InvokedTime <= Sunset Then
             RemainingInsolationToday = CurrentDayForecast.PVEstimate
             ForecastInsolationTomorrow = NextDayForecastGeneration

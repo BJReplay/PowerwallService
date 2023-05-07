@@ -232,5 +232,8 @@
 &lt;/SerializableConnectionString&gt;</DesignTimeValue>
       <Value Profile="(Default)">Data Source=TODO;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO</Value>
     </Setting>
+    <Setting Name="PWConsumptionToPeakStartUseHistory" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
   </Settings>
 </SettingsFile>
