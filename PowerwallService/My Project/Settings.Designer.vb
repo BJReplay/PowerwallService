@@ -689,15 +689,6 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
-        Public ReadOnly Property PWOvernightConsumptionUseHistory() As Boolean
-            Get
-                Return CType(Me("PWOvernightConsumptionUseHistory"),Boolean)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
          Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.ConnectionString),  _
          Global.System.Configuration.DefaultSettingValueAttribute("Server=tcp:TODO.database.windows.net,1433;Initial Catalog=PWHistory;Persist Secur"& _ 
             "ity Info=True;User ID=TODO;Password=TODO;MultipleActiveResultSets=False;Encrypt="& _ 

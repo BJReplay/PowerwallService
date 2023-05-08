@@ -174,8 +174,7 @@ Public Class PowerwallService
         GetCloudProducts()
         GetCloudPWMode()
         GetPeakConsumption()
-        GetOvernightConsumption()
-        GetConsumptionToPeakStart()
+        GetConsumptionToPeakStart(OffPeakStartHour)
 
         If My.Settings.PWForceModeOnStartup Then
             Dim Intent As String = "Thinking"
@@ -462,25 +461,11 @@ Public Class PowerwallService
             EventLog.WriteEntry(String.Format("Failed to get Peak Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 804)
         End Try
     End Sub
-    Private Sub GetOvernightConsumption()
-        OvernightConsumption = 0
-        Try
-            If My.Settings.PWOvernightConsumptionUseHistory Then
-                OvernightConsumption = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=OffPeakStartHour, PeriodEndHour:=TomorrowSunrise.Hour - 1))
-                EventLog.WriteEntry(String.Format("Overnight Consumption Set To: {0}", OvernightConsumption), EventLogEntryType.Information, 805)
-            End If
-        Catch ex As Exception
-            EventLog.WriteEntry(String.Format("Failed to get Overnight Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 806)
-        End Try
-    End Sub
-    Private Sub GetConsumptionToPeakStart()
+    Private Sub GetConsumptionToPeakStart(StartHour As Integer)
         ConsumptionToPeakStart = 0
-        Dim NowHour As Integer = Now.Hour()
         Try
-            If My.Settings.PWConsumptionToPeakStartUseHistory Then
-                ConsumptionToPeakStart = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=NowHour, PeriodEndHour:=PeakStartHour))
-                EventLog.WriteEntry(String.Format("OffPeak to Peak Start Consumption Set To: {0}", ConsumptionToPeakStart), EventLogEntryType.Information, 807)
-            End If
+            ConsumptionToPeakStart = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=StartHour, PeriodEndHour:=PeakStartHour))
+            EventLog.WriteEntry(String.Format("OffPeak to Peak Start Consumption Set To: {0}", ConsumptionToPeakStart), EventLogEntryType.Information, 807)
         Catch ex As Exception
             EventLog.WriteEntry(String.Format("Failed to get OffPeak to Peak Start Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 808)
         End Try
@@ -504,23 +489,22 @@ Public Class PowerwallService
         Dim Intent As String = "Thinking"
         Dim NewTarget As Decimal = 0
         Dim RemainingToPeak As Integer = 0
-        PWPeakConsumption = CInt(IIf(CurrentDOW = DayOfWeek.Saturday Or CurrentDOW = DayOfWeek.Sunday, My.Settings.PWPeakConsumptionWeekend, My.Settings.PWPeakConsumption))
+        Dim StartHour As Integer
         If My.Settings.PWPeakConsumptionUseHistory Then
             If PeakConsumption > 0 Then
                 PWPeakConsumption = PeakConsumption
             End If
         End If
-        RawOffPeak = My.Settings.PWOvernightLoad
-        If My.Settings.PWOvernightConsumptionUseHistory Then
-            If OvernightConsumption > 0 Then
-                RawOffPeak = OvernightConsumption
-            End If
-        End If
         If My.Settings.PWConsumptionToPeakStartUseHistory Then
-            GetConsumptionToPeakStart()
+            If InvokedTime < PeakStart Then
+                StartHour = InvokedTime.Hour
+            Else
+                StartHour = OffPeakStartHour
+            End If
+            GetConsumptionToPeakStart(StartHour)
             RemainingToPeak = ConsumptionToPeakStart
         End If
-        RawOffPeak += RemainingToPeak
+        RawOffPeak = RemainingToPeak
         If InvokedTime <= Sunset Then
             RemainingInsolationToday = CurrentDayForecast.PVEstimate
             ForecastInsolationTomorrow = NextDayForecastGeneration
