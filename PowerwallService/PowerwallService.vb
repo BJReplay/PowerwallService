@@ -547,7 +547,7 @@ Public Class PowerwallService
         End If
         PWPeakConsumption = CInt(CSng(PWPeakConsumption) * RemainingPeakRatio)
         RemainingOffPeak = RawOffPeak * RemainingOvernightRatio
-        RawTargetSOC = CInt((My.Settings.PWMorningBuffer + RemainingOffPeak) / My.Settings.PWCapacity) * 100
+        RawTargetSOC = CInt(((My.Settings.PWMorningBuffer + RemainingOffPeak) / My.Settings.PWCapacity) * 100)
         If RawTargetSOC > 100 Then RawTargetSOC = 100
         If ShortfallInsolation < 0 Then ShortfallInsolation = 0
         ShortfallInsolation /= My.Settings.PWRoundTripEfficiency
