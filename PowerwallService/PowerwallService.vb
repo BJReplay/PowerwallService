@@ -314,11 +314,12 @@ Public Class PowerwallService
         End If
         If InvokedTime.Hour >= 0 And InvokedTime.Hour < PeakStartHour + 1 And OffPeakStartsBeforeMidnight Then
             OffPeakStart = DateAdd(DateInterval.Day, -1, OffPeakStart)
+            If OffPeakStart.Day < InvokedTime.Day Then OffPeakStart = DateAdd(DateInterval.Day, 1, OffPeakStart)
             If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Off Peak Start {0:yyyy-MM-dd HH:mm}", OffPeakStart), EventLogEntryType.Information, 709)
         End If
         PeakStart = New DateTime(OffPeakStart.Year, OffPeakStart.Month, OffPeakStart.Day, PeakStartHour, 0, 0)
         If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Initial Off Peak End {0:yyyy-MM-dd HH:mm}", PeakStart), EventLogEntryType.Information, 710)
-        If OffPeakStartsBeforeMidnight Then
+        If OffPeakStartsBeforeMidnight And Not (InvokedTime >= PeakStart And InvokedTime <= OffPeakStart) Then
             PeakStart = DateAdd(DateInterval.Day, 1, PeakStart)
             If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Off Peak End {0:yyyy-MM-dd HH:mm}", PeakStart), EventLogEntryType.Information, 711)
         End If
