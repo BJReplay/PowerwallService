@@ -478,6 +478,7 @@ Public Class PowerwallService
         Dim ResultConsumptionToPeakStart As Integer = 0
         Try
             ResultConsumptionToPeakStart = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=StartHour, PeriodEndHour:=(PeakStartHour - 1)))
+            ConsumptionToPeakStart = ResultConsumptionToPeakStart
             EventLog.WriteEntry(String.Format("OffPeak to Peak Start Consumption Set To: {0}", ResultConsumptionToPeakStart), EventLogEntryType.Information, 807)
         Catch ex As Exception
             EventLog.WriteEntry(String.Format("Failed to get OffPeak to Peak Start Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 808)
@@ -627,7 +628,7 @@ Public Class PowerwallService
         If My.Settings.PBIChargeIntentEndpoint <> String.Empty Then
             Try
                 Dim PBIRows As New PBIChargeLogging With {.Rows = New List(Of ChargePlan)}
-                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = My.Settings.PWMorningBuffer, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .RemainingOffPeak = RemainingOffPeak, .Shortfall = ShortfallInsolation, .PeakConsumption = PWPeakConsumption})
+                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .MorningBuffer = OvernightConsumption, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .RemainingOffPeak = RemainingOffPeak, .Shortfall = ShortfallInsolation, .PeakConsumption = PWPeakConsumption})
                 Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBIChargeIntentEndpoint, PBIRows)
             Catch ex As Exception
                 EventLog.WriteEntry(String.Format("Failed to write Charge Plan to Power BI: Ex:{0} ({1})", ex.GetType, ex.Message), EventLogEntryType.Warning, 911)
