@@ -407,8 +407,8 @@ Public Class PowerBIStreaming
     End Class
     Public Class ChargePlan
         Public Property CurrentSOC As Single
-        Public Property MorningBuffer As Single
-        Public Property RemainingOffPeak As Single
+        Public Property OvernightConsumption As Single
+        Public Property SunriseToPeak As Single
         Public Property ForecastGeneration As Single
         Public Property Shortfall As Single
         Public Property RequiredSOC As Single
