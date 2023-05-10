@@ -174,7 +174,8 @@ Public Class PowerwallService
         GetCloudProducts()
         GetCloudPWMode()
         GetPeakConsumption()
-        GetConsumptionToPeakStart(OffPeakStartHour)
+        GetOvernightConsumption()
+        GetConsumptionToPeakStart(Sunrise.Hour)
 
         If My.Settings.PWForceModeOnStartup Then
             Dim Intent As String = "Thinking"
@@ -462,15 +463,27 @@ Public Class PowerwallService
             EventLog.WriteEntry(String.Format("Failed to get Peak Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 804)
         End Try
     End Sub
-    Private Sub GetConsumptionToPeakStart(StartHour As Integer)
-        ConsumptionToPeakStart = 0
+    Private Sub GetOvernightConsumption()
+        OvernightConsumption = 0
         Try
-            ConsumptionToPeakStart = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=StartHour, PeriodEndHour:=PeakStartHour))
-            EventLog.WriteEntry(String.Format("OffPeak to Peak Start Consumption Set To: {0}", ConsumptionToPeakStart), EventLogEntryType.Information, 807)
+            If My.Settings.PWOvernightConsumptionUseHistory Then
+                OvernightConsumption = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=OffPeakStartHour, PeriodEndHour:=(Sunrise.Hour - 1)))
+                EventLog.WriteEntry(String.Format("Overnight Consumption Set To: {0}", OvernightConsumption), EventLogEntryType.Information, 805)
+            End If
+        Catch ex As Exception
+            EventLog.WriteEntry(String.Format("Failed to get Overnight Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 805)
+        End Try
+    End Sub
+    Private Function GetConsumptionToPeakStart(StartHour As Integer) As Integer
+        Dim ResultConsumptionToPeakStart As Integer = 0
+        Try
+            ResultConsumptionToPeakStart = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=StartHour, PeriodEndHour:=(PeakStartHour - 1)))
+            EventLog.WriteEntry(String.Format("OffPeak to Peak Start Consumption Set To: {0}", ResultConsumptionToPeakStart), EventLogEntryType.Information, 807)
         Catch ex As Exception
             EventLog.WriteEntry(String.Format("Failed to get OffPeak to Peak Start Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 808)
         End Try
-    End Sub
+        Return ResultConsumptionToPeakStart
+    End Function
 #End Region
 #Region "Forecasts and Targets"
     Sub CheckSOCLevel()
@@ -484,6 +497,7 @@ Public Class PowerwallService
         Dim RemainingInsolationToday As Single
         Dim ForecastInsolationTomorrow As Single
         Dim PWPeakConsumption As Integer
+        Dim PWOvernightConsumption As Integer
         Dim RawOffPeak As Single
         Dim InPeak As Boolean = False
         Dim RemainingOffPeak As Single = 1
@@ -491,21 +505,29 @@ Public Class PowerwallService
         Dim NewTarget As Decimal = 0
         Dim RemainingToPeak As Integer = 0
         Dim StartHour As Integer
+        Dim StandbyIntent As Boolean = False
         If My.Settings.PWPeakConsumptionUseHistory Then
             If PeakConsumption > 0 Then
                 PWPeakConsumption = PeakConsumption
             End If
         End If
+        If My.Settings.PWOvernightConsumptionUseHistory Then
+            If OvernightConsumption > 0 Then
+                PWOvernightConsumption = OvernightConsumption
+            End If
+        End If
         If My.Settings.PWConsumptionToPeakStartUseHistory Then
-            If InvokedTime < PeakStart Then
+            If InvokedTime >= Sunrise And InvokedTime < PeakStart Then
                 StartHour = InvokedTime.Hour
+            ElseIf InvokedTime < Sunrise And InvokedTime < PeakStart Then
+                StartHour = Sunrise.Hour
             Else
-                StartHour = OffPeakStartHour
+                StartHour = Sunrise.Hour
             End If
             GetConsumptionToPeakStart(StartHour)
             RemainingToPeak = ConsumptionToPeakStart
         End If
-        RawOffPeak = RemainingToPeak
+        RawOffPeak = PWOvernightConsumption
         If InvokedTime <= Sunset Then
             RemainingInsolationToday = CurrentDayForecast.PVEstimate
             ForecastInsolationTomorrow = NextDayForecastGeneration
@@ -516,7 +538,7 @@ Public Class PowerwallService
         PWPeakConsumption += CInt(My.Settings.PWMinBackupPercentage * My.Settings.PWCapacity / 100)
         If InvokedTime > Sunrise And InvokedTime < Sunset And InvokedTime < PeakStart Then
             RemainingOvernightRatio = 1
-            ShortfallInsolation = PWPeakConsumption - RemainingInsolationToday
+            ShortfallInsolation = (PWPeakConsumption + RemainingToPeak) - RemainingInsolationToday
             Intent = "Sun is Up, Waiting for Peak"
         ElseIf InvokedTime > Sunrise And InvokedTime < Sunset Then
             RemainingOvernightRatio = 1
@@ -526,18 +548,18 @@ Public Class PowerwallService
         ElseIf InvokedTime > PeakStart And InvokedTime < Sunrise Then
             RemainingOvernightRatio = 0
             InPeak = True
-            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
+            ShortfallInsolation = (PWPeakConsumption + RemainingToPeak) - NextDayForecastGeneration
             Intent = "Waiting for Sunrise, In Peak"
         ElseIf InvokedTime > Sunset And InvokedTime < OffPeakStart Then
             RemainingOvernightRatio = 1
             InPeak = True
-            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
+            ShortfallInsolation = (PWPeakConsumption + RemainingToPeak) - NextDayForecastGeneration
             Intent = "Sun is Down, Waiting for Off Peak"
         ElseIf InvokedTime > OffPeakStart And InvokedTime < PeakStart Then
             RemainingOvernightRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, PeakStart) + 1) / OffPeakHours)
             If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
             If RemainingOvernightRatio > 1 Then RemainingOvernightRatio = 1
-            ShortfallInsolation = PWPeakConsumption - NextDayForecastGeneration
+            ShortfallInsolation = (PWPeakConsumption + RemainingToPeak) - NextDayForecastGeneration
             Intent = "Monitoring"
         End If
         If InPeak Then
@@ -547,15 +569,19 @@ Public Class PowerwallService
         End If
         PWPeakConsumption = CInt(CSng(PWPeakConsumption) * RemainingPeakRatio)
         RemainingOffPeak = RawOffPeak * RemainingOvernightRatio
-        RawTargetSOC = CInt(((My.Settings.PWMorningBuffer + RemainingOffPeak) / My.Settings.PWCapacity) * 100) ' Force Push
-        If RawTargetSOC > 100 Then RawTargetSOC = 100
         If ShortfallInsolation < 0 Then ShortfallInsolation = 0
         ShortfallInsolation /= My.Settings.PWRoundTripEfficiency
-        NoStandbyTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
-        If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
-        StandbyTargetSOC = My.Settings.PWMorningBuffer + (ShortfallInsolation / My.Settings.PWCapacity * 100)
-        If StandbyTargetSOC > 100 Then StandbyTargetSOC = 100
-        NewTarget = CDec(IIf(My.Settings.PWOvernightStandby, StandbyTargetSOC, NoStandbyTargetSOC))
+        If ShortfallInsolation > 0 Then ' Tomorrow's forecast insolation insufficient to cover load from sunrise through to end of peak
+            StandbyIntent = True
+            NewTarget = SOC.percentage
+        ElseIf ((PWPeakConsumption + RemainingToPeak + RemainingOffPeak) - NextDayForecastGeneration) > 0 Then ' Tomorrow's forecast insolation insufficient to cover load from now through to end of peak
+            StandbyIntent = True
+            RawTargetSOC = CInt(((My.Settings.PWMorningBuffer + RemainingToPeak + RemainingOffPeak) / My.Settings.PWCapacity) * 100)
+            If RawTargetSOC > 100 Then RawTargetSOC = 100
+            NoStandbyTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
+            If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
+            NewTarget = CDec(NoStandbyTargetSOC)
+        End If
         If InvokedTime < OffPeakStart Then
             If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Then
                 Intent = "Planning to Charge"
