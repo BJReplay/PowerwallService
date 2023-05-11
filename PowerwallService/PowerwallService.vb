@@ -483,7 +483,7 @@ Public Class PowerwallService
             End If
             ResultConsumptionToPeakStart = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=StartHour, PeriodEndHour:=EndHour))
             ConsumptionToPeakStart = ResultConsumptionToPeakStart
-            EventLog.WriteEntry(String.Format("OffPeak to Peak Start Consumption Set To: {0}", ResultConsumptionToPeakStart), EventLogEntryType.Information, 807)
+            EventLog.WriteEntry(String.Format("OffPeak {1} to Peak Start {2} Consumption Set To: {0}", ResultConsumptionToPeakStart, StartHour, EndHour), EventLogEntryType.Information, 807)
         Catch ex As Exception
             EventLog.WriteEntry(String.Format("Failed to get OffPeak to Peak Start Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 808)
         End Try
@@ -522,7 +522,9 @@ Public Class PowerwallService
             End If
         End If
         If My.Settings.PWConsumptionToPeakStartUseHistory Then
-            If InvokedTime >= Sunrise And InvokedTime < PeakStart Then
+            If InvokedTime >= Sunrise And InvokedTime >= OffPeakStart Then
+                StartHour = Sunrise.Hour
+            ElseIf InvokedTime >= Sunrise And InvokedTime < PeakStart Then
                 StartHour = InvokedTime.Hour
             ElseIf InvokedTime < Sunrise And InvokedTime < PeakStart Then
                 StartHour = Sunrise.Hour
