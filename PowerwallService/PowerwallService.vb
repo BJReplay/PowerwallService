@@ -581,10 +581,10 @@ Public Class PowerwallService
                 StandbyIntent = True
                 NewTarget = SOC.percentage
             Else ' In Off Peak
-                StandbyIntent = True
                 NoStandbyTargetSOC = (ShortfallInsolation / My.Settings.PWCapacity * 100)
                 If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
                 NewTarget = CDec(NoStandbyTargetSOC)
+                StandbyIntent = (NewTarget >= SOC.percentage)
             End If
         ElseIf ((PWPeakConsumption + RemainingToPeak + RemainingOffPeak) - NextDayForecastGeneration) > 0 Then ' Tomorrow's forecast insolation insufficient to cover load from now through to end of peak
             StandbyIntent = True
@@ -593,8 +593,10 @@ Public Class PowerwallService
             NewTarget = CDec(RawTargetSOC)
         End If
         If InvokedTime < OffPeakStart Then
-            If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Or StandbyIntent Then
+            If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Then
                 Intent = "Planning to Charge"
+            ElseIf StandbyIntent Then
+                Intent = "Planning to Standby"
             Else
                 Intent = "No Charging Required"
             End If
