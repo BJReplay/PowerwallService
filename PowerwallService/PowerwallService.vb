@@ -476,8 +476,12 @@ Public Class PowerwallService
     End Sub
     Private Function GetConsumptionToPeakStart(StartHour As Integer) As Integer
         Dim ResultConsumptionToPeakStart As Integer = 0
+        Dim EndHour As Integer = (PeakStartHour - 1)
         Try
-            ResultConsumptionToPeakStart = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=StartHour, PeriodEndHour:=(PeakStartHour - 1)))
+            If StartHour = EndHour Then
+                EndHour += 1
+            End If
+            ResultConsumptionToPeakStart = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=StartHour, PeriodEndHour:=EndHour))
             ConsumptionToPeakStart = ResultConsumptionToPeakStart
             EventLog.WriteEntry(String.Format("OffPeak to Peak Start Consumption Set To: {0}", ResultConsumptionToPeakStart), EventLogEntryType.Information, 807)
         Catch ex As Exception
@@ -493,7 +497,7 @@ Public Class PowerwallService
         Dim ShortfallInsolation As Single = 0
         Dim NoStandbyTargetSOC As Single = 0
         Dim StandbyTargetSOC As Single = 0
-        Dim RemainingOvernightRatio As Single
+        Dim RemainingOvernightRatio As Single = 1
         Dim RemainingPeakRatio As Single = 1
         Dim RemainingInsolationToday As Single
         Dim ForecastInsolationTomorrow As Single
@@ -572,16 +576,21 @@ Public Class PowerwallService
         RemainingOffPeak = RawOffPeak * RemainingOvernightRatio
         If ShortfallInsolation < 0 Then ShortfallInsolation = 0
         ShortfallInsolation /= My.Settings.PWRoundTripEfficiency
-        If ShortfallInsolation > 0 Then ' Tomorrow's forecast insolation insufficient to cover load from sunrise through to end of peak
-            StandbyIntent = True
-            NewTarget = SOC.percentage
+        If ShortfallInsolation > 0 Then ' Forecast insolation insufficient to cover load from sunrise through to end of peak
+            If InvokedTime >= PeakStart And InvokedTime < OffPeakStart Then ' Still in Peak
+                StandbyIntent = True
+                NewTarget = SOC.percentage
+            Else ' In Off Peak
+                StandbyIntent = True
+                NoStandbyTargetSOC = (ShortfallInsolation / My.Settings.PWCapacity * 100)
+                If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
+                NewTarget = CDec(NoStandbyTargetSOC)
+            End If
         ElseIf ((PWPeakConsumption + RemainingToPeak + RemainingOffPeak) - NextDayForecastGeneration) > 0 Then ' Tomorrow's forecast insolation insufficient to cover load from now through to end of peak
             StandbyIntent = True
-            RawTargetSOC = CInt(((My.Settings.PWMorningBuffer + RemainingToPeak + RemainingOffPeak) / My.Settings.PWCapacity) * 100)
+            RawTargetSOC = CInt(((RemainingToPeak + RemainingOffPeak) / My.Settings.PWCapacity) * 100)
             If RawTargetSOC > 100 Then RawTargetSOC = 100
-            NoStandbyTargetSOC = RawTargetSOC + (ShortfallInsolation / My.Settings.PWCapacity * 100)
-            If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
-            NewTarget = CDec(NoStandbyTargetSOC)
+            NewTarget = CDec(RawTargetSOC)
         End If
         If InvokedTime < OffPeakStart Then
             If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Or StandbyIntent Then
@@ -615,6 +624,12 @@ Public Class PowerwallService
                         PreCharging = True
                         OnStandby = False
                     End If
+                ElseIf (SOC.percentage < NewTarget) Or (LastTarget < NewTarget And PreCharging) Then
+                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting or Charging now Required: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 516)
+                    If SetPWMode("Current SOC below required Pre-Peak SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
+                        PreCharging = True
+                        OnStandby = False
+                    End If
                 ElseIf SOC.percentage >= NewTarget And PreCharging And Not OnStandby Then
                     EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
                     DoExitCharging(Intent)
@@ -628,7 +643,7 @@ Public Class PowerwallService
         If My.Settings.PBIChargeIntentEndpoint <> String.Empty Then
             Try
                 Dim PBIRows As New PBIChargeLogging With {.Rows = New List(Of ChargePlan)}
-                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .OvernightConsumption = OvernightConsumption, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .SunriseToPeak = RemainingToPeak, .Shortfall = ShortfallInsolation, .PeakConsumption = PWPeakConsumption})
+                PBIRows.Rows.Add(New ChargePlan With {.AsAt = InvokedTime, .CurrentSOC = SOC.percentage, .RemainingInsolation = RemainingInsolationToday, .ForecastGeneration = ForecastInsolationTomorrow, .OvernightConsumption = RemainingOffPeak, .OperatingIntent = Intent, .RequiredSOC = NewTarget, .SunriseToPeak = RemainingToPeak, .Shortfall = ShortfallInsolation, .PeakConsumption = PWPeakConsumption})
                 Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBIChargeIntentEndpoint, PBIRows)
             Catch ex As Exception
                 EventLog.WriteEntry(String.Format("Failed to write Charge Plan to Power BI: Ex:{0} ({1})", ex.GetType, ex.Message), EventLogEntryType.Warning, 911)
