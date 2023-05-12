@@ -646,7 +646,10 @@ Public Class PowerwallService
                     End If
                 ElseIf SOC.percentage >= NewTarget And Not ChargingIntent Then
                     EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
-                    DoExitCharging(Intent)
+                    If SetPWMode("Switching to Standby", "Enter", "Standby", NewTarget, DischargeMode, Intent) = 202 Then
+                        OnStandby = True
+                        PreCharging = False
+                    End If
                 End If
             Else
                 If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage), EventLogEntryType.Information, 503)
