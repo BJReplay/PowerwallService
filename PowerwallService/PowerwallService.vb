@@ -511,6 +511,7 @@ Public Class PowerwallService
         Dim RemainingToPeak As Integer = 0
         Dim StartHour As Integer
         Dim StandbyIntent As Boolean = False
+        Dim ChargingIntent As Boolean = False
         If My.Settings.PWPeakConsumptionUseHistory Then
             If PeakConsumption > 0 Then
                 PWPeakConsumption = PeakConsumption
@@ -603,38 +604,47 @@ Public Class PowerwallService
                 Intent = "No Charging Required"
             End If
         End If
+        If NewTarget > SOC.percentage Then
+            StandbyIntent = True
+            ChargingIntent = True
+        ElseIf (SOC.percentage + 5) > NewTarget Then
+            ChargingIntent = False
+        Else
+            ChargingIntent = False
+            StandbyIntent = False
+        End If
         Try
-            If InvokedTime > DateAdd(DateInterval.Minute, -15, PeakStart) And (PreCharging Or AboveMinBackup Or OnStandby) Then
+            If InvokedTime > DateAdd(DateInterval.Minute, -15, PeakStart) Then
                 OperationLockout = PeakStart
                 EventLog.WriteEntry(String.Format("Reaching end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, StandbyTargetSOC), EventLogEntryType.Information, 504)
                 DoExitCharging(Intent)
-            ElseIf (InvokedTime >= OffPeakStart And InvokedTime < PeakStart And InvokedTime > OperationLockout) Then
+            ElseIf ((InvokedTime >= OffPeakStart And InvokedTime < PeakStart And InvokedTime > OperationLockout) Or (InvokedTime >= Sunrise And InvokedTime < PeakStart And InvokedTime > OperationLockout)) Then
                 If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Minimum required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 500)
                 If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OffPeakStart, PeakStart), EventLogEntryType.Information, 714)
-                If StandbyIntent And InvokedTime >= Sunset And (Not OnStandby Or SOC.percentage > LastTarget) Then
+                If StandbyIntent And InvokedTime >= Sunset And Not ChargingIntent Then
                     If SetPWMode("Pre-Peak SOC would be below required SOC, Switching to Standby for Off Peak", "Enter", "Standby", NewTarget, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
-                ElseIf SOC.percentage >= NewTarget And PreCharging And Not OnStandby And InvokedTime >= Sunset Then
+                ElseIf SOC.percentage >= NewTarget And StandbyIntent And Not ChargingIntent And InvokedTime >= Sunset Then
                     EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 505)
                     If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", NewTarget, DischargeMode, Intent) = 202 Then
                         OnStandby = True
                         PreCharging = False
                     End If
-                ElseIf (LastTarget < NewTarget And OnStandby) Or (LastTarget < NewTarget And PreCharging) Then
+                ElseIf (LastTarget < NewTarget And OnStandby) Or (LastTarget < NewTarget And PreCharging) Or ChargingIntent Then
                     If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
                     If SetPWMode("Current SOC below required Pre-Peak SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
                         PreCharging = True
                         OnStandby = False
                     End If
-                ElseIf (SOC.percentage < NewTarget) Or (LastTarget < NewTarget And PreCharging) Then
+                ElseIf (SOC.percentage < NewTarget) Or (LastTarget < NewTarget And Not ChargingIntent) Then
                     If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting or Charging now Required: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, StandbyTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 516)
                     If SetPWMode("Current SOC below required Pre-Peak SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
                         PreCharging = True
                         OnStandby = False
                     End If
-                ElseIf SOC.percentage >= NewTarget And PreCharging And Not OnStandby Then
+                ElseIf SOC.percentage >= NewTarget And Not ChargingIntent Then
                     EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NoStandbyTargetSOC), EventLogEntryType.Information, 502)
                     DoExitCharging(Intent)
                 End If
