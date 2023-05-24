@@ -614,7 +614,7 @@ Public Class PowerwallService
             StandbyIntent = False
         End If
         Try
-            If InvokedTime > DateAdd(DateInterval.Minute, -15, PeakStart) Then
+            If InvokedTime > DateAdd(DateInterval.Minute, CDbl(-15.0), PeakStart) Then
                 OperationLockout = PeakStart
                 EventLog.WriteEntry(String.Format("Reaching end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, NewTarget), EventLogEntryType.Information, 504)
                 DoExitCharging(Intent)
