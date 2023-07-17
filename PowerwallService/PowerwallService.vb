@@ -517,6 +517,10 @@ Public Class PowerwallService
                 PWPeakConsumption = PeakConsumption
             End If
         End If
+        Dim ChargeBuffer As Integer = 0
+        If My.Settings.PWChargeBuffer <> 0 Then
+            ChargeBuffer = My.Settings.PWChargeBuffer
+        End If
         If My.Settings.PWOvernightConsumptionUseHistory Then
             If OvernightConsumption > 0 Then
                 PWOvernightConsumption = OvernightConsumption
@@ -584,14 +588,14 @@ Public Class PowerwallService
                 StandbyIntent = True
                 NewTarget = SOC.percentage
             Else ' In Off Peak
-                NoStandbyTargetSOC = (ShortfallInsolation / My.Settings.PWCapacity * 100)
+                NoStandbyTargetSOC = (ShortfallInsolation / My.Settings.PWCapacity * 100) + ChargeBuffer
                 If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
                 NewTarget = CDec(NoStandbyTargetSOC)
                 StandbyIntent = (NewTarget >= SOC.percentage)
             End If
         ElseIf ((PWPeakConsumption + RemainingToPeak + RemainingOffPeak) - NextDayForecastGeneration) > 0 Then ' Tomorrow's forecast insolation insufficient to cover load from now through to end of peak
             StandbyIntent = True
-            RawTargetSOC = CInt(((RemainingToPeak + RemainingOffPeak) / My.Settings.PWCapacity) * 100)
+            RawTargetSOC = CInt(((RemainingToPeak + RemainingOffPeak) / My.Settings.PWCapacity) * 100) + ChargeBuffer
             If RawTargetSOC > 100 Then RawTargetSOC = 100
             NewTarget = CDec(RawTargetSOC)
         End If
