@@ -63,13 +63,13 @@
       <Value Profile="(Default)">22</Value>
     </Setting>
     <Setting Name="TariffPeakRate" Type="System.Single" Scope="Application">
-      <Value Profile="(Default)">32</Value>
+      <Value Profile="(Default)">36</Value>
     </Setting>
     <Setting Name="TariffOffPeakRate" Type="System.Single" Scope="Application">
-      <Value Profile="(Default)">19</Value>
+      <Value Profile="(Default)">23</Value>
     </Setting>
     <Setting Name="TariffFeedInRate" Type="System.Single" Scope="Application">
-      <Value Profile="(Default)">5.2</Value>
+      <Value Profile="(Default)">8.2</Value>
     </Setting>
     <Setting Name="PWRoundTripEfficiency" Type="System.Decimal" Scope="Application">
       <Value Profile="(Default)">0.85</Value>
@@ -237,6 +237,9 @@
     </Setting>
     <Setting Name="PWChargeBuffer" Type="System.Int32" Scope="Application">
       <Value Profile="(Default)">0</Value>
+    </Setting>
+    <Setting Name="PWSkipControl" Type="System.Boolean" Scope="Application">
+      <Value Profile="(Default)">False</Value>
     </Setting>
   </Settings>
 </SettingsFile>

@@ -922,24 +922,28 @@ Public Class PowerwallService
         Target = (Target - AppMinCharge) / AppToLocalRatio ' Convert to Cloud Target from local SOC target calcuted by charge planning routine
         If Target > 100 Then Target = 100
         If Target < 0 Then Target = 0
-        Try
-            If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format(ActionMessage & " Current SOC={0}, Current Target={1}", SOC.percentage, Target), EventLogEntryType.Information, 511)
-            Intent = ActionType
-            Dim ChargeSettings As New Operation With {.backup_reserve_percent = Target, .real_mode = Mode}
-            Dim APIResult As Integer = DoSetPWModeCloudAPICalls(ChargeSettings)
-            If APIResult = 202 Or APIResult = 200 Then
-                EventLog.WriteEntry(String.Format("{5}ed {6} Mode: Current SOC={0}, Raw Target={1}, Set Mode={2}, API Call Target={3}, APIResult = {4}", SOC.percentage, LastTarget, ChargeSettings.real_mode, ChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Information, 512)
-                AboveMinBackup = (ChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
+        If Not My.Settings.PWSkipControl Then
+            Try
+                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format(ActionMessage & " Current SOC={0}, Current Target={1}", SOC.percentage, Target), EventLogEntryType.Information, 511)
                 Intent = ActionType
-                SetPWMode = 202 ' Calls to SetPWMode expect APIResult of 202 as per behaviour for FW 1.42 and earlier
-            Else
-                EventLog.WriteEntry(String.Format("Failed to {5} {6} Mode: Current SOC={0}, Raw Target={1}, Mode={2}, API Call Target={3}, APIResult = {4}", SOC.percentage, LastTarget, ChargeSettings.real_mode, ChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Warning, 513)
-                Intent = String.Format("Trying to {0} {1}", ActionMode, ActionType)
-                SetPWMode = APIResult
-            End If
-        Catch ex As Exception
-            SetPWMode = 0
-        End Try
+                Dim ChargeSettings As New Operation With {.backup_reserve_percent = Target, .real_mode = Mode}
+                Dim APIResult As Integer = DoSetPWModeCloudAPICalls(ChargeSettings)
+                If APIResult = 202 Or APIResult = 200 Then
+                    EventLog.WriteEntry(String.Format("{5}ed {6} Mode: Current SOC={0}, Raw Target={1}, Set Mode={2}, API Call Target={3}, APIResult = {4}", SOC.percentage, LastTarget, ChargeSettings.real_mode, ChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Information, 512)
+                    AboveMinBackup = (ChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
+                    Intent = ActionType
+                    SetPWMode = 202 ' Calls to SetPWMode expect APIResult of 202 as per behaviour for FW 1.42 and earlier
+                Else
+                    EventLog.WriteEntry(String.Format("Failed to {5} {6} Mode: Current SOC={0}, Raw Target={1}, Mode={2}, API Call Target={3}, APIResult = {4}", SOC.percentage, LastTarget, ChargeSettings.real_mode, ChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Warning, 513)
+                    Intent = String.Format("Trying to {0} {1}", ActionMode, ActionType)
+                    SetPWMode = APIResult
+                End If
+            Catch ex As Exception
+                SetPWMode = 0
+            End Try
+        Else
+            SetPWMode = 202 ' Calls to SetPWMode expect APIResult of 202 as per behaviour for FW 1.42 and earlier
+        End If
         SkipObservation = False
     End Function
     Private Function DoSetPWModeCloudAPICalls(ChargeSettings As Operation) As Integer

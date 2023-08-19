@@ -15,7 +15,7 @@ Option Explicit On
 Namespace My
     
     <Global.System.Runtime.CompilerServices.CompilerGeneratedAttribute(),  _
-     Global.System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "17.6.0.0"),  _
+     Global.System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "17.7.0.0"),  _
      Global.System.ComponentModel.EditorBrowsableAttribute(Global.System.ComponentModel.EditorBrowsableState.Advanced)>  _
     Partial Friend NotInheritable Class MySettings
         Inherits Global.System.Configuration.ApplicationSettingsBase
@@ -237,7 +237,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("32")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("36")>  _
         Public ReadOnly Property TariffPeakRate() As Single
             Get
                 Return CType(Me("TariffPeakRate"),Single)
@@ -246,7 +246,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("19")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("23")>  _
         Public ReadOnly Property TariffOffPeakRate() As Single
             Get
                 Return CType(Me("TariffOffPeakRate"),Single)
@@ -255,7 +255,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("5.2")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("8.2")>  _
         Public ReadOnly Property TariffFeedInRate() As Single
             Get
                 Return CType(Me("TariffFeedInRate"),Single)
@@ -734,6 +734,15 @@ Namespace My
         Public ReadOnly Property PWChargeBuffer() As Integer
             Get
                 Return CType(Me("PWChargeBuffer"),Integer)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+        Public ReadOnly Property PWSkipControl() As Boolean
+            Get
+                Return CType(Me("PWSkipControl"),Boolean)
             End Get
         End Property
     End Class
