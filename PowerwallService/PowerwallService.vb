@@ -84,6 +84,11 @@ Public Class PowerwallService
     Shared PeakConsumption As Integer = 0
     Shared OvernightConsumption As Integer = 0
     Shared ConsumptionToPeakStart As Integer = 0
+    Shared SuperOffPeakStart As DateTime
+    Shared SuperOffPeakStartHour As Integer
+    Shared SuperOffPeakEnd As DateTime
+    Shared SuperOffPeakEndHour As Integer
+    Shared SuperOffPeakHours As Double
 #End Region
 #Region "Timer Handlers"
     Protected Async Sub OnSixSecondTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
@@ -324,6 +329,40 @@ Public Class PowerwallService
             PeakStart = DateAdd(DateInterval.Day, 1, PeakStart)
             If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Off Peak End {0:yyyy-MM-dd HH:mm}", PeakStart), EventLogEntryType.Information, 711)
         End If
+        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Off Peak Start: {0:yyyy-MM-dd HH:mm} End: {1:yyyy-MM-dd HH:mm}", OffPeakStart, PeakStart), EventLogEntryType.Information, 713)
+        If My.Settings.TariffSuperOffPeakActive Then
+            SuperOffPeakStartHour = My.Settings.TariffSuperOffPeakStart
+            SuperOffPeakEndHour = My.Settings.TariffSuperOffPeakEnd
+            If My.Settings.TariffIgnoresDST And TZI.IsDaylightSavingTime(InvokedTime) Then
+                OffPeakStartHour += CByte(1)
+                If OffPeakStartHour > 23 Then OffPeakStartHour -= CByte(24)
+                PeakStartHour += CByte(1)
+                If PeakStartHour > 23 Then PeakStartHour -= CByte(24)
+            End If
+            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Super Off Peak Hours From {0} To {1}", SuperOffPeakStartHour, SuperOffPeakEndHour), EventLogEntryType.Information, 704)
+            SuperOffPeakHours = SuperOffPeakEndHour - SuperOffPeakStartHour
+            If SuperOffPeakHours <= 0 Then SuperOffPeakHours += 24
+            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Super Off Peak Duration {0}", SuperOffPeakHours), EventLogEntryType.Information, 712)
+            SuperOffPeakStart = New DateTime(InvokedTime.Year, InvokedTime.Month, InvokedTime.Day, SuperOffPeakStartHour, 0, 0)
+            SuperOffPeakEnd = New DateTime(InvokedTime.Year, InvokedTime.Month, InvokedTime.Day, SuperOffPeakEndHour, 0, 0)
+            If InvokedTime.Hour >= SuperOffPeakEndHour Then
+                SuperOffPeakStart = DateAdd(DateInterval.Day, 1, SuperOffPeakStart)
+                SuperOffPeakEnd = DateAdd(DateInterval.Day, 1, SuperOffPeakEnd)
+                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Super Off Peak End {0:yyyy-MM-dd HH:mm}", SuperOffPeakEnd), EventLogEntryType.Information, 715)
+                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Super Off Peak Start {0:yyyy-MM-dd HH:mm}", SuperOffPeakStart), EventLogEntryType.Information, 714)
+            End If
+            If InvokedTime.Hour >= 0 And InvokedTime.Hour < SuperOffPeakStartHour + 1 Then
+                SuperOffPeakStart = DateAdd(DateInterval.Day, -1, SuperOffPeakStart)
+                If SuperOffPeakStart.Day < InvokedTime.Day Or SuperOffPeakStart.Month < InvokedTime.Month Then SuperOffPeakStart = DateAdd(DateInterval.Day, 1, SuperOffPeakStart)
+                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Super Off Peak Start {0:yyyy-MM-dd HH:mm}", SuperOffPeakStart), EventLogEntryType.Information, 716)
+            End If
+            If InvokedTime.Hour >= 0 And InvokedTime.Hour < SuperOffPeakEndHour Then
+                SuperOffPeakEnd = DateAdd(DateInterval.Day, -1, SuperOffPeakEnd)
+                If SuperOffPeakEnd.Day < InvokedTime.Day Or SuperOffPeakEnd.Month < InvokedTime.Month Then SuperOffPeakEnd = DateAdd(DateInterval.Day, 1, SuperOffPeakEnd)
+                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Super Off Peak End {0:yyyy-MM-dd HH:mm}", SuperOffPeakEnd), EventLogEntryType.Information, 717)
+            End If
+            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Super Off Peak Start: {0:yyyy-MM-dd HH:mm} End: {1:yyyy-MM-dd HH:mm}", SuperOffPeakStart, SuperOffPeakEnd), EventLogEntryType.Information, 718)
+        End If
         If Sunrise.Date <> InvokedTime.Date Then
             Dim SunriseSunsetData As Result = GetSunriseSunset(Of Result)(InvokedTime)
             With SunriseSunsetData.results
@@ -338,7 +377,6 @@ Public Class PowerwallService
                 TomorrowSunset = .sunset.ToLocalTime
             End With
         End If
-        If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Start: {0:yyyy-MM-dd HH:mm} End: {1:yyyy-MM-dd HH:mm}", OffPeakStart, PeakStart), EventLogEntryType.Information, 713)
     End Sub
     Sub DoPerMinuteTasks()
         Dim Minute As Integer = Now.Minute
@@ -568,14 +606,14 @@ Public Class PowerwallService
             ShortfallInsolation = (PWPeakConsumption + RemainingToPeak) - NextDayForecastGeneration
             Intent = "Sun is Down, Waiting for Off Peak"
         ElseIf InvokedTime > OffPeakStart And InvokedTime < PeakStart Then
-            RemainingOvernightRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, PeakStart) + 1) / OffPeakHours)
+            RemainingOvernightRatio = CSng(DateDiff(DateInterval.Minute, InvokedTime, PeakStart) / (OffPeakHours * 60))
             If RemainingOvernightRatio < 0 Then RemainingOvernightRatio = 0
             If RemainingOvernightRatio > 1 Then RemainingOvernightRatio = 1
             ShortfallInsolation = (PWPeakConsumption + RemainingToPeak) - NextDayForecastGeneration
             Intent = "Monitoring"
         End If
         If InPeak Then
-            RemainingPeakRatio = CSng((DateDiff(DateInterval.Hour, InvokedTime, OffPeakStart) + 1) / (24 - OffPeakHours))
+            RemainingPeakRatio = CSng(DateDiff(DateInterval.Minute, InvokedTime, OffPeakStart) / ((24 - OffPeakHours) * 60))
             If RemainingPeakRatio < 0 Then RemainingPeakRatio = 0
             If RemainingPeakRatio > 1 Then RemainingPeakRatio = 1
         End If
@@ -587,18 +625,23 @@ Public Class PowerwallService
             If InvokedTime >= PeakStart And InvokedTime < OffPeakStart Then ' Still in Peak
                 StandbyIntent = True
                 NewTarget = SOC.percentage
-            Else ' In Off Peak
+            Else ' In Off Peak or Super Off Peak
                 NoStandbyTargetSOC = (ShortfallInsolation / My.Settings.PWCapacity * 100) + ChargeBuffer
                 If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
-                NewTarget = CDec(NoStandbyTargetSOC)
-                StandbyIntent = (NewTarget >= SOC.percentage)
+                StandbyIntent = NoStandbyTargetSOC >= SOC.percentage
+                If My.Settings.TariffSuperOffPeakActive And InvokedTime >= SuperOffPeakStart And InvokedTime < SuperOffPeakEnd Or Not My.Settings.TariffSuperOffPeakActive Then
+                    ' In Super Off Peak or Super Off Peak not Active
+                    NewTarget = CDec(NoStandbyTargetSOC)
+                Else ' In Off Peak
+                    If SOC.percentage >= NoStandbyTargetSOC Then
+                        ' Don't stand by yet - we'll charge in Super Off Peak
+                        NewTarget = CDec(NoStandbyTargetSOC)
+                    Else
+                        ' Currnt SOC < Target, preserve charge
+                        NewTarget = SOC.percentage
+                    End If
+                End If
             End If
-            ' Commenting out this block - it works on tomorrow's shortfall, and may never be necessary.  Currently charging for tomorrow, today.
-            'ElseIf ((PWPeakConsumption + RemainingToPeak + RemainingOffPeak) - NextDayForecastGeneration) > 0 Then ' Tomorrow's forecast insolation insufficient to cover load from now through to end of peak
-            '    StandbyIntent = True
-            '    RawTargetSOC = CInt(((RemainingToPeak + RemainingOffPeak) / My.Settings.PWCapacity) * 100) + ChargeBuffer
-            '    If RawTargetSOC > 100 Then RawTargetSOC = 100
-            '    NewTarget = CDec(RawTargetSOC)
         End If
         If InvokedTime < OffPeakStart Then
             If ShortfallInsolation > 0 Or NewTarget > SOC.percentage Then

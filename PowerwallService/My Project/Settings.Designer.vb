@@ -745,6 +745,33 @@ Namespace My
                 Return CType(Me("PWSkipControl"),Boolean)
             End Get
         End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("10")>  _
+        Public ReadOnly Property TariffSuperOffPeakStart() As Integer
+            Get
+                Return CType(Me("TariffSuperOffPeakStart"),Integer)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("15")>  _
+        Public ReadOnly Property TariffSuperOffPeakEnd() As Integer
+            Get
+                Return CType(Me("TariffSuperOffPeakEnd"),Integer)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+        Public ReadOnly Property TariffSuperOffPeakActive() As Boolean
+            Get
+                Return CType(Me("TariffSuperOffPeakActive"),Boolean)
+            End Get
+        End Property
     End Class
 End Namespace
 
