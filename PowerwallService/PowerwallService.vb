@@ -532,6 +532,7 @@ Public Class PowerwallService
     Sub CheckSOCLevel()
         Dim InvokedTime As DateTime = Now
         Dim RawTargetSOC As Integer
+        Dim MinPWSetting As Integer = CInt(My.Settings.PWMinBackupPercentage)
         Dim ShortfallInsolation As Single = 0
         Dim NoStandbyTargetSOC As Single = 0
         Dim StandbyTargetSOC As Single = 0
@@ -577,6 +578,13 @@ Public Class PowerwallService
             GetConsumptionToPeakStart(StartHour)
             RemainingToPeak = ConsumptionToPeakStart
         End If
+        If My.Settings.TariffSuperOffPeakActive Then
+            If InvokedTime > SuperOffPeakStart And InvokedTime < SuperOffPeakEnd Then
+                ChargeBuffer -= CInt(CSng(DateDiff(DateInterval.Minute, InvokedTime, SuperOffPeakEnd) / CSng(SuperOffPeakHours * 60) * 1.7 / 13 * 100))
+            Else
+                ChargeBuffer -= CInt(SuperOffPeakHours * 1.7 / 13 * 100)
+            End If
+        End If
         RawOffPeak = PWOvernightConsumption
         If InvokedTime <= Sunset Then
             RemainingInsolationToday = CurrentDayForecast.PVEstimate
@@ -585,7 +593,7 @@ Public Class PowerwallService
             RemainingInsolationToday = 0
             ForecastInsolationTomorrow = NextDayForecastGeneration
         End If
-        PWPeakConsumption += CInt(My.Settings.PWMinBackupPercentage * My.Settings.PWCapacity / 100)
+        PWPeakConsumption += CInt(MinPWSetting * My.Settings.PWCapacity / 100)
         If InvokedTime > Sunrise And InvokedTime < Sunset And InvokedTime < PeakStart Then
             RemainingOvernightRatio = 1
             ShortfallInsolation = (PWPeakConsumption + RemainingToPeak) - RemainingInsolationToday
@@ -628,6 +636,7 @@ Public Class PowerwallService
             Else ' In Off Peak or Super Off Peak
                 NoStandbyTargetSOC = (ShortfallInsolation / My.Settings.PWCapacity * 100) + ChargeBuffer
                 If NoStandbyTargetSOC > 100 Then NoStandbyTargetSOC = 100
+                If NoStandbyTargetSOC < MinPWSetting Then NoStandbyTargetSOC = MinPWSetting
                 StandbyIntent = NoStandbyTargetSOC >= SOC.percentage
                 If My.Settings.TariffSuperOffPeakActive And InvokedTime >= SuperOffPeakStart And InvokedTime < SuperOffPeakEnd Or Not My.Settings.TariffSuperOffPeakActive Then
                     ' In Super Off Peak or Super Off Peak not Active
