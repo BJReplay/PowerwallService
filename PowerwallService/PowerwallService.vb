@@ -971,9 +971,10 @@ Public Class PowerwallService
     Private Function SetPWMode(ActionMessage As String, ActionMode As String, ActionType As String, Target As Decimal, Mode As String, ByRef Intent As String) As Integer
         SkipObservation = True
         LastTarget = Target
+        Dim MinPWSetting As Integer = My.Settings.PWMinBackupPercentage
         Target = (Target - AppMinCharge) / AppToLocalRatio ' Convert to Cloud Target from local SOC target calcuted by charge planning routine
         If Target > 100 Then Target = 100
-        If Target < 0 Then Target = 0
+        If Target < MinPWSetting Then Target = MinPWSetting
         If Not My.Settings.PWSkipControl Then
             Try
                 If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format(ActionMessage & " Current SOC={0}, Current Target={1}", SOC.percentage, Target), EventLogEntryType.Information, 511)
@@ -982,7 +983,7 @@ Public Class PowerwallService
                 Dim APIResult As Integer = DoSetPWModeCloudAPICalls(ChargeSettings)
                 If APIResult = 202 Or APIResult = 200 Then
                     EventLog.WriteEntry(String.Format("{5}ed {6} Mode: Current SOC={0}, Raw Target={1}, Set Mode={2}, API Call Target={3}, APIResult = {4}", SOC.percentage, LastTarget, ChargeSettings.real_mode, ChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Information, 512)
-                    AboveMinBackup = (ChargeSettings.backup_reserve_percent > My.Settings.PWMinBackupPercentage)
+                    AboveMinBackup = (ChargeSettings.backup_reserve_percent > MinPWSetting)
                     Intent = ActionType
                     SetPWMode = 202 ' Calls to SetPWMode expect APIResult of 202 as per behaviour for FW 1.42 and earlier
                 Else
