@@ -23,6 +23,7 @@ Public Class PowerwallService
     Const autonomous As String = "autonomous"
     Const AppMinCharge As Decimal = 5
     Const AppToLocalRatio As Decimal = CDec(95 / 100)
+    Private ChargeMode As String = self_consumption
     Private DischargeMode As String = self_consumption
     Private ChargeSpeed As Single = 1.7
     Private ReadOnly ObsTA As New PWHistoryDataSetTableAdapters.observationsTableAdapter
@@ -173,7 +174,7 @@ Public Class PowerwallService
         GetSavedPWRefreshToken()
         SetOffPeakHours(Now)
         If My.Settings.PWUseAutonomous Then
-            DischargeMode = autonomous
+            ChargeMode = autonomous
             ChargeSpeed = 5.0
         End If
         PWCloudToken = LoginPWCloud()
@@ -974,14 +975,20 @@ Public Class PowerwallService
         SkipObservation = True
         LastTarget = Target
         Dim MinPWSetting As Integer = My.Settings.PWMinBackupPercentage
+        Dim MyChargeMode As String = Mode
         Target = (Target - AppMinCharge) / AppToLocalRatio ' Convert to Cloud Target from local SOC target calcuted by charge planning routine
         If Target > 100 Then Target = 100
         If Target < MinPWSetting Then Target = MinPWSetting
         If Not My.Settings.PWSkipControl Then
+            If My.Settings.PWAutoChargeMode And Target > SOC.percentage And My.Settings.PWUseAutonomous Then
+                MyChargeMode = DischargeMode
+            Else
+                MyChargeMode = self_consumption
+            End If
             Try
                 If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format(ActionMessage & " Current SOC={0}, Current Target={1}", SOC.percentage, Target), EventLogEntryType.Information, 511)
                 Intent = ActionType
-                Dim ChargeSettings As New Operation With {.backup_reserve_percent = Target, .real_mode = Mode}
+                Dim ChargeSettings As New Operation With {.backup_reserve_percent = Target, .real_mode = MyChargeMode}
                 Dim APIResult As Integer = DoSetPWModeCloudAPICalls(ChargeSettings)
                 If APIResult = 202 Or APIResult = 200 Then
                     EventLog.WriteEntry(String.Format("{5}ed {6} Mode: Current SOC={0}, Raw Target={1}, Set Mode={2}, API Call Target={3}, APIResult = {4}", SOC.percentage, LastTarget, ChargeSettings.real_mode, ChargeSettings.backup_reserve_percent, APIResult, ActionMode, ActionType), EventLogEntryType.Information, 512)
@@ -1221,7 +1228,7 @@ Public Class PowerwallService
         Return PWCloudToken
     End Function
     Private Sub DoExitCharging(ByRef Intent As String)
-        If SetPWMode("Exit Charge or Standby Mode", "Enter", DischargeMode, My.Settings.PWMinBackupPercentage, DischargeMode, Intent) = 202 Then
+        If SetPWMode("Exit Charge or Standby Mode", "Enter", "Standby", My.Settings.PWMinBackupPercentage, self_consumption, Intent) = 202 Then
             PreCharging = False
             OnStandby = False
             AboveMinBackup = False

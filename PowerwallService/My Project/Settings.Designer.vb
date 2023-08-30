@@ -772,6 +772,15 @@ Namespace My
                 Return CType(Me("TariffSuperOffPeakActive"),Boolean)
             End Get
         End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+        Public ReadOnly Property PWAutoChargeMode() As Boolean
+            Get
+                Return CType(Me("PWAutoChargeMode"),Boolean)
+            End Get
+        End Property
     End Class
 End Namespace
 
