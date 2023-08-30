@@ -24,6 +24,7 @@ Public Class PowerwallService
     Const AppMinCharge As Decimal = 5
     Const AppToLocalRatio As Decimal = CDec(95 / 100)
     Private DischargeMode As String = self_consumption
+    Private ChargeSpeed As Single = 1.7
     Private ReadOnly ObsTA As New PWHistoryDataSetTableAdapters.observationsTableAdapter
     Private ReadOnly SolarTA As New PWHistoryDataSetTableAdapters.solarTableAdapter
     Private ReadOnly SOCTA As New PWHistoryDataSetTableAdapters.socTableAdapter
@@ -173,6 +174,7 @@ Public Class PowerwallService
         SetOffPeakHours(Now)
         If My.Settings.PWUseAutonomous Then
             DischargeMode = autonomous
+            ChargeSpeed = 5.0
         End If
         PWCloudToken = LoginPWCloud()
         PWLocalToken = LoginPWLocalUser(ForceReLogin:=True)
@@ -580,9 +582,9 @@ Public Class PowerwallService
         End If
         If My.Settings.TariffSuperOffPeakActive Then
             If InvokedTime > SuperOffPeakStart And InvokedTime < SuperOffPeakEnd Then
-                ChargeBuffer -= CInt(CSng(DateDiff(DateInterval.Minute, InvokedTime, SuperOffPeakEnd) / CSng(SuperOffPeakHours * 60) * 1.7 / 13 * 100))
+                ChargeBuffer -= CInt(CSng(DateDiff(DateInterval.Minute, InvokedTime, SuperOffPeakEnd) / CSng(SuperOffPeakHours * 60) * ChargeSpeed / 13 * 100))
             Else
-                ChargeBuffer -= CInt(SuperOffPeakHours * 1.7 / 13 * 100)
+                ChargeBuffer -= CInt(SuperOffPeakHours * ChargeSpeed / 13 * 100)
             End If
         End If
         RawOffPeak = PWOvernightConsumption
