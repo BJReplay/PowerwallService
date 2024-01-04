@@ -291,6 +291,9 @@ Public Class PowerwallService
             Try
                 SyncLock DBLock
                     SPs.spAggregateToMinute()
+                    If Not My.Settings.LogAzureOnly Then
+                        SPs.spAggregateToMinuteLocal()
+                    End If
                 End SyncLock
             Catch Ex As Exception
                 EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
