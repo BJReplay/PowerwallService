@@ -1,8 +1,8 @@
 # PowerwallService
 This windows service can log data from a local Powerwall to a local database and / or an azure database, can control pre-charging during off-peak, and can upload data to PVOutput.
 
-Important: This tool is designed for users who have access to the customise screen that allows them to set a backup percentage in self consumption mode.  If you do not have this option, the API calls that this service makes to request your powerwall to charge or to stop charging may not work.  You may end up with your powerwall stuck in a mode you do not want.  You may not be able to get it out of this mode.  You may be voiding your warranty.  You may end up with a very expensive, very heavy battery that is NOT saving you any money.  You run this program entirely at your own risk.
-==================================================
+> [!CAUTION]
+>  This tool is designed for users who have access to the customise screen that allows them to set a backup percentage in self consumption mode.  If you do not have this option, the API calls that this service makes to request your powerwall to charge or to stop charging may not work.  You may end up with your powerwall stuck in a mode you do not want.  You may not be able to get it out of this mode.  You may be voiding your warranty.  You may end up with a very expensive, very heavy battery that is NOT saving you any money.  You run this program entirely at your own risk.
 
 Powerwall upgrade instructions.
 --------------------------------------------------
