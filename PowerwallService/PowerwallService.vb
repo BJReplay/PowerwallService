@@ -23,7 +23,6 @@ Public Class PowerwallService
     Const autonomous As String = "autonomous"
     Const AppMinCharge As Decimal = 5
     Const AppToLocalRatio As Decimal = CDec(95 / 100)
-    Private ChargeMode As String = self_consumption
     Private DischargeMode As String = self_consumption
     Private ChargeSpeed As Single = 1.7
     Private ReadOnly ObsTA As New PWHistoryDataSetTableAdapters.observationsTableAdapter
@@ -174,7 +173,7 @@ Public Class PowerwallService
         GetSavedPWRefreshToken()
         SetOffPeakHours(Now)
         If My.Settings.PWUseAutonomous Then
-            ChargeMode = autonomous
+            DischargeMode = autonomous
             ChargeSpeed = 5.0
         End If
         PWCloudToken = LoginPWCloud()
