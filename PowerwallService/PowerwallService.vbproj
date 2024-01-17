@@ -11,7 +11,7 @@
     <AssemblyName>PowerwallService</AssemblyName>
     <FileAlignment>512</FileAlignment>
     <MyType>Console</MyType>
-    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -60,9 +60,6 @@
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Xml.Linq" />
-    <Reference Include="TeslaAuth">
-      <HintPath>TeslaAuth\TeslaAuth.dll</HintPath>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Import Include="Microsoft.VisualBasic" />
@@ -194,6 +191,9 @@
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json">
       <Version>13.0.3</Version>
+    </PackageReference>
+    <PackageReference Include="TeslaAuth">
+      <Version>3.0.1</Version>
     </PackageReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />

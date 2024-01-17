@@ -781,6 +781,51 @@ Namespace My
                 Return CType(Me("PWAutoChargeMode"),Boolean)
             End Get
         End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+        Public ReadOnly Property UseTeslaFleetAPI() As Boolean
+            Get
+                Return CType(Me("UseTeslaFleetAPI"),Boolean)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
+        Public ReadOnly Property TeslaFleetClientID() As String
+            Get
+                Return CType(Me("TeslaFleetClientID"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
+        Public ReadOnly Property TeslaFleetClientSecret() As String
+            Get
+                Return CType(Me("TeslaFleetClientSecret"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
+        Public ReadOnly Property TeslaFleetScope() As String
+            Get
+                Return CType(Me("TeslaFleetScope"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("https://fleet-api.prd.na.vn.cloud.tesla.com/")>  _
+        Public ReadOnly Property TeslaFleetAPI() As String
+            Get
+                Return CType(Me("TeslaFleetAPI"),String)
+            End Get
+        End Property
     End Class
 End Namespace
 

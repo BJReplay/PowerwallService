@@ -120,11 +120,6 @@ Public Class PowerwallService
                            DoDailyTasks()
                        End Sub)
     End Sub
-    Protected Async Sub DebugTask()
-        Await Task.Run(Sub()
-                           DoAsyncStartupProcesses()
-                       End Sub)
-    End Sub
 #End Region
 #Region "Service Methods"
     Public Sub New()
@@ -176,7 +171,7 @@ Public Class PowerwallService
             DischargeMode = autonomous
             ChargeSpeed = 5.0
         End If
-        PWCloudToken = LoginPWCloud()
+        PWCloudToken = RefreshTokensHelper()
         PWLocalToken = LoginPWLocalUser(ForceReLogin:=True)
         GetCloudProducts()
         GetCloudPWMode()
@@ -427,7 +422,7 @@ Public Class PowerwallService
     End Sub
     Private Sub DoTenMinuteTasks()
         If Now > PWCloudTokenExpires Then
-            RefreshTokens()
+            RefreshTokensHelper()
         End If
         SetOffPeakHours(Now)
         If Not FirstReadingsAvailable Then
@@ -439,7 +434,7 @@ Public Class PowerwallService
         End If
     End Sub
     Private Sub DoDailyTasks()
-        RefreshTokens()
+        RefreshTokensHelper()
         GetPeakConsumption()
     End Sub
     Function GetUnsecuredJSONResult(Of JSONType)(URL As String) As JSONType
@@ -1031,7 +1026,7 @@ Public Class PowerwallService
     End Function
     Private Shared Function GetCloudPWRequest(API As String) As HttpWebRequest
         Dim wr As HttpWebRequest
-        wr = CType(WebRequest.Create(My.Settings.PWCloudAPI & API), HttpWebRequest)
+        wr = CType(WebRequest.Create(API), HttpWebRequest)
         Return wr
     End Function
     Private Sub GetCloudPWMode()
@@ -1074,10 +1069,11 @@ Public Class PowerwallService
             End If
         End Try
     End Sub
-    Function GetPWCloudAPIResult(Of JSONType)(API As String, Optional ForceReLogin As Boolean = False) As JSONType
+    Function GetPWCloudAPIResult(Of JSONType)(API As String) As JSONType
         Try
-            PWCloudToken = LoginPWCloud(ForceReLogin:=ForceReLogin)
-            Dim request As WebRequest = WebRequest.Create(My.Settings.PWCloudAPI & "api/1/" & API)
+            PWCloudToken = RefreshTokensHelper()
+            Dim BaseAPI As String = TeslaAPIHelper()
+            Dim request As WebRequest = WebRequest.Create(BaseAPI & "api/1/" & API)
             request.Headers.Add("Authorization", "Bearer " & PWCloudToken)
             Dim response As HttpWebResponse
             Try
@@ -1085,7 +1081,7 @@ Public Class PowerwallService
             Catch WebEx As WebException
                 Dim ExResponseCode As HttpStatusCode = CType(WebEx.Response, HttpWebResponse).StatusCode
                 If ExResponseCode = 401 Or ExResponseCode = 403 Then
-                    PWCloudToken = LoginPWCloud(ForceReLogin:=True)
+                    PWCloudToken = RefreshTokensHelper()
                     request.Headers.Set("Authorization", "Bearer " & PWCloudToken)
                     response = CType(request.GetResponse(), HttpWebResponse)
                 Else
@@ -1104,12 +1100,12 @@ Public Class PowerwallService
             EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
         End Try
     End Function
-    Function PostPWCloudAPISettings(Of JSONType)(API As String, Settings As JSONType, Optional ForceReLogin As Boolean = False) As CloudAPIResponse
+    Function PostPWCloudAPISettings(Of JSONType)(API As String, Settings As JSONType) As CloudAPIResponse
         Try
-            PWCloudToken = LoginPWCloud(ForceReLogin:=ForceReLogin)
+            PWCloudToken = RefreshTokensHelper()
             Dim BodyPostData As String = JsonConvert.SerializeObject(Settings).ToString
             Dim BodyByteStream As Byte() = Encoding.UTF8.GetBytes(BodyPostData)
-            Dim request As WebRequest = GetCloudPWRequest("api/1/" & API)
+            Dim request As WebRequest = GetCloudPWRequest(TeslaAPIHelper() & "api/1/" & API)
             request.Headers.Add("Authorization", "Bearer " & PWCloudToken)
             request.Method = "POST"
             request.ContentType = "application/json"
@@ -1123,7 +1119,7 @@ Public Class PowerwallService
             Catch WebEx As WebException
                 Dim ExResponseCode As HttpStatusCode = CType(WebEx.Response, HttpWebResponse).StatusCode
                 If ExResponseCode = 401 Or ExResponseCode = 403 Then
-                    PWCloudToken = LoginPWCloud(ForceReLogin:=True)
+                    PWCloudToken = RefreshTokensHelper()
                     request.Headers.Set("Authorization", "Bearer " & PWCloudToken)
                     response = CType(request.GetResponse(), HttpWebResponse)
                 Else
@@ -1193,7 +1189,7 @@ Public Class PowerwallService
             PWCloudRefreshToken = LocalRefreshToken
         End If
         If PWCloudRefreshToken <> String.Empty Then
-            RefreshTokens()
+            RefreshTokensHelper()
         End If
         Dim LocalPWCloudToken As String = ReadAppSetting("PWCloudToken")
         If LocalPWCloudToken <> String.Empty Then
@@ -1206,12 +1202,31 @@ Public Class PowerwallService
             End If
         End If
     End Sub
-    Function LoginPWCloud(Optional ForceReLogin As Boolean = False) As String
-        If PWCloudToken = String.Empty Or ForceReLogin = True Then
+    Private Function RefreshTokensHelper() As String
+        Dim Retval As String
+        If PWCloudTokenExpires < DateAdd(DateInterval.Minute, 30, Now) Then
+            If My.Settings.UseTeslaFleetAPI Then
+                Retval = RefreshFleetTokens()
+            Else
+                Retval = RefreshTokens()
+            End If
+        Else
+            Retval = PWCloudToken
+        End If
+        Return Retval
+    End Function
+    Private Function TeslaAPIHelper() As String
+        If My.Settings.UseTeslaFleetAPI Then
+            Return My.Settings.TeslaFleetAPI
+        Else
+            Return My.Settings.PWCloudAPI
+        End If
+    End Function
+    Private Function RefreshTokens() As String
+        If PWCloudRefreshToken <> String.Empty Then
             Try
-                PWCloudTokenExpires = DateAdd(DateInterval.Minute, -10, Now)
+                PWCloudTokenExpires = DateAdd(DateInterval.Hour, -1, Now)
                 Dim AuthHelper As New TeslaAuthHelper(String.Format("PowerwallService/{0}", My.Application.Info.Version.ToString))
-                PWCloudRefreshToken = AuthHelper.AuthenticateAsync(My.Settings.PWCloudEmail, My.Settings.PWCloudPassword, My.Settings.PWCloudMFARecoveryToken).Result.RefreshToken
                 With AuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result
                     PWCloudToken = .AccessToken
                     PWCloudRefreshToken = .RefreshToken
@@ -1221,14 +1236,41 @@ Public Class PowerwallService
                     AddUpdateAppSettings("PWCloudRefreshToken", PWCloudRefreshToken)
 
                 End With
-                EventLog.WriteEntry(String.Format("Initial Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 900)
-                EventLog.WriteEntry(String.Format("Initial Refresh Token: {0}", PWCloudRefreshToken), EventLogEntryType.Information, 901)
+                EventLog.WriteEntry(String.Format("Refreshed Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 902)
+                EventLog.WriteEntry(String.Format("Refreshed Refresh Token: {0}", PWCloudRefreshToken), EventLogEntryType.Information, 903)
             Catch ex As Exception
                 EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
             End Try
+        Else
+            EventLog.WriteEntry(String.Format("No Refresh Token available, attempting using existing Access Token {0}", PWCloudToken), EventLogEntryType.Information, 905)
         End If
         Return PWCloudToken
     End Function
+    Function RefreshFleetTokens() As String
+        Try
+            PWCloudTokenExpires = DateAdd(DateInterval.Hour, -1, Now)
+            Dim AuthHelper As New TeslaAuthHelper(TeslaAccountRegion.USA, My.Settings.TeslaFleetClientID, My.Settings.TeslaFleetClientSecret, My.Settings.TeslaFleetScope, My.Application.Info.Version.ToString)
+            With AuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result
+                PWCloudToken = .AccessToken
+                PWCloudRefreshToken = .RefreshToken
+                PWCloudTokenExpires += .ExpiresIn
+
+                AddUpdateAppSettings("PWCloudToken", PWCloudToken)
+                AddUpdateAppSettings("PWCloudRefreshToken", PWCloudRefreshToken)
+
+            End With
+            EventLog.WriteEntry(String.Format("Initial Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 900)
+            EventLog.WriteEntry(String.Format("Initial Refresh Token: {0}", PWCloudRefreshToken), EventLogEntryType.Information, 901)
+        Catch ex As Exception
+            EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
+        End Try
+        Return PWCloudToken
+    End Function
+    Protected Async Sub DebugTask()
+        Await Task.Run(Sub()
+                           DoAsyncStartupProcesses()
+                       End Sub)
+    End Sub
     Private Sub DoExitCharging(ByRef Intent As String)
         If SetPWMode("Exit Charge or Standby Mode", "Enter", "Standby", My.Settings.PWMinBackupPercentage, self_consumption, Intent) = 202 Then
             PreCharging = False
@@ -1268,29 +1310,6 @@ Public Class PowerwallService
             Return Nothing
         End Try
     End Function
-    Private Sub RefreshTokens()
-        If PWCloudRefreshToken <> String.Empty Then
-            Try
-                PWCloudTokenExpires = DateAdd(DateInterval.Hour, -1, Now)
-                Dim AuthHelper As New TeslaAuthHelper(String.Format("PowerwallService/{0}", My.Application.Info.Version.ToString))
-                With AuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result
-                    PWCloudToken = .AccessToken
-                    PWCloudRefreshToken = .RefreshToken
-                    PWCloudTokenExpires += .ExpiresIn
-
-                    AddUpdateAppSettings("PWCloudToken", PWCloudToken)
-                    AddUpdateAppSettings("PWCloudRefreshToken", PWCloudRefreshToken)
-
-                End With
-                EventLog.WriteEntry(String.Format("Refreshed Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 902)
-                EventLog.WriteEntry(String.Format("Refreshed Refresh Token: {0}", PWCloudRefreshToken), EventLogEntryType.Information, 903)
-            Catch ex As Exception
-                EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
-            End Try
-        Else
-            EventLog.WriteEntry(String.Format("No Refresh Token available, attempting using existing Access Token {0}", PWCloudToken), EventLogEntryType.Information, 905)
-        End If
-    End Sub
 #End Region
 #Region "PVOutput"
     Private Sub DoBackFill(AsAt As DateTime)
