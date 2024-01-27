@@ -1522,8 +1522,10 @@ Public Class PowerwallService
             response.Close()
             Dim records() As String = responseFromServer.Split(CChar(";"))
             Dim StatusRecords As New List(Of StatusRecord)
+            Dim fields() As String
             For i = 0 To records.Count - 1
-                StatusRecords.Add(New StatusRecord(records(i).Split(CChar(","))))
+                fields = records(i).Split(CChar(","))
+                StatusRecords.Add(New StatusRecord(fields, Len(fields)))
             Next
             PVGetStatusHistory = StatusRecords
         Catch Ex As Exception

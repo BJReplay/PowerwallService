@@ -317,7 +317,7 @@ Public Class PVOutput
         Public Property Data As String
     End Class
     Public Class StatusRecord
-        Public Sub New(field() As String)
+        Public Sub New(field() As String, len As Integer)
             d = field(0)
             t = field(1)
             v1 = field(2)
@@ -329,12 +329,14 @@ Public Class PVOutput
             v4 = field(8)
             v5 = field(9)
             v6 = field(10)
-            v7 = field(11)
-            v8 = field(12)
-            v9 = field(13)
-            v10 = field(14)
-            v11 = field(15)
-            v12 = field(16)
+            If len > 10 Then
+                v7 = field(11)
+                v8 = field(12)
+                v9 = field(13)
+                v10 = field(14)
+                v11 = field(15)
+                v12 = field(16)
+            End If
         End Sub
         Default ReadOnly Property Item(PropertyName As String) As Object
             Get
