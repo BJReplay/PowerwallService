@@ -523,9 +523,11 @@ Public Class PowerwallService
             If StartHour = EndHour Then
                 EndHour += 1
             End If
-            ResultConsumptionToPeakStart = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=StartHour, PeriodEndHour:=EndHour))
-            ConsumptionToPeakStart = ResultConsumptionToPeakStart
-            EventLog.WriteEntry(String.Format("OffPeak {1} to Peak Start {2} Consumption Set To: {0}", ResultConsumptionToPeakStart, StartHour, EndHour), EventLogEntryType.Information, 807)
+            If My.Settings.PWPeakConsumptionUseHistory Then
+                ResultConsumptionToPeakStart = CInt(SPs.fnGetMonthlyPeriodLoad(PeriodStartHour:=StartHour, PeriodEndHour:=EndHour))
+                ConsumptionToPeakStart = ResultConsumptionToPeakStart
+                EventLog.WriteEntry(String.Format("OffPeak {1} to Peak Start {2} Consumption Set To: {0}", ResultConsumptionToPeakStart, StartHour, EndHour), EventLogEntryType.Information, 807)
+            End If
         Catch ex As Exception
             EventLog.WriteEntry(String.Format("Failed to get OffPeak to Peak Start Consumption: Exception: {0}, Stack Trace: {1}", ex.Message, ex.StackTrace), EventLogEntryType.Error, 808)
         End Try
@@ -1182,6 +1184,7 @@ Public Class PowerwallService
         Return PWLocalToken
     End Function
     Sub GetTeslaFleetClientCredentials()
+        EventLog.WriteEntry(String.Format("Entered Get Telsa Fleet Credentials"), EventLogEntryType.Information, 915)
         Dim HashiCreds As HashiCorp.HashiToken
         Dim Target As String = "https://auth.hashicorp.com/oauth/token"
         Dim ClientID As String = "ZEuAUHWzzTHdCNVf46PNb7H95smsG0r3"
@@ -1197,8 +1200,14 @@ Public Class PowerwallService
 
         For Each Secret As HashiCorp.Secret In HashiSecrets.secrets
             With Secret
-                If .name = "TeslaFleetClientSecret" Then TeslaFleetClientSecret = .version.value
-                If .name = "TeslaFleetClientID" Then TeslaFleetClientID = .version.value
+                If .name = "TeslaFleetClientSecret" Then
+                    TeslaFleetClientSecret = .version.value
+                    EventLog.WriteEntry(String.Format("Got TeslaFleetClientSecret"), EventLogEntryType.Information, 916)
+                End If
+                If .name = "TeslaFleetClientID" Then
+                    TeslaFleetClientID = .version.value
+                    EventLog.WriteEntry(String.Format("Got TeslaFleetClientID"), EventLogEntryType.Information, 917)
+                End If
             End With
         Next
 
@@ -1230,6 +1239,7 @@ Public Class PowerwallService
     End Sub
     Private Function RefreshTokensHelper() As String
         Dim Retval As String
+        EventLog.WriteEntry(String.Format("Entered Token Helper"), EventLogEntryType.Information, 920)
         If PWCloudTokenExpires < DateAdd(DateInterval.Minute, 30, Now) Then
             If My.Settings.UseTeslaFleetAPI Then
                 Retval = RefreshFleetTokens()
@@ -1249,6 +1259,7 @@ Public Class PowerwallService
         End If
     End Function
     Private Function RefreshTokens() As String
+        EventLog.WriteEntry(String.Format("Entered Owner API Token Refresh"), EventLogEntryType.Information, 912)
         If PWCloudRefreshToken <> String.Empty Then
             Try
                 PWCloudTokenExpires = DateAdd(DateInterval.Hour, -1, Now)
@@ -1265,7 +1276,7 @@ Public Class PowerwallService
                 EventLog.WriteEntry(String.Format("Refreshed Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 902)
                 EventLog.WriteEntry(String.Format("Refreshed Refresh Token: {0}", PWCloudRefreshToken), EventLogEntryType.Information, 903)
             Catch ex As Exception
-                EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
+                EventLog.WriteEntry("Error retrieving Owner API Tokens" & ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error, 913)
             End Try
         Else
             EventLog.WriteEntry(String.Format("No Refresh Token available, attempting using existing Access Token {0}", PWCloudToken), EventLogEntryType.Information, 905)
@@ -1273,6 +1284,7 @@ Public Class PowerwallService
         Return PWCloudToken
     End Function
     Function RefreshFleetTokens() As String
+        EventLog.WriteEntry(String.Format("Entered Fleet Token Refresh"), EventLogEntryType.Information, 911)
         Try
             PWCloudTokenExpires = DateAdd(DateInterval.Hour, -1, Now)
             Dim AuthHelper As New TeslaAuthHelper(TeslaAccountRegion.USA, TeslaFleetClientID, TeslaFleetClientSecret, My.Settings.TeslaFleetScope, My.Application.Info.Version.ToString)
@@ -1288,7 +1300,7 @@ Public Class PowerwallService
             EventLog.WriteEntry(String.Format("Initial Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 900)
             EventLog.WriteEntry(String.Format("Initial Refresh Token: {0}", PWCloudRefreshToken), EventLogEntryType.Information, 901)
         Catch ex As Exception
-            EventLog.WriteEntry(ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error)
+            EventLog.WriteEntry("Error retrieving Fleet Tokens" & ex.Message & vbCrLf & vbCrLf & ex.StackTrace, EventLogEntryType.Error, 914)
         End Try
         Return PWCloudToken
     End Function
@@ -1337,6 +1349,7 @@ Public Class PowerwallService
         End Try
     End Function
     Function GetHashiCorpAT(Of JSONType)(URL As String, ClientID As String, ClientSecret As String) As JSONType
+        EventLog.WriteEntry(String.Format("Entered Get Hashi Access Token"), EventLogEntryType.Information, 918)
         Try
             Dim RawBody As String = """audience"": ""https://api.hashicorp.cloud"", ""grant_type"": ""client_credentials"", ""client_id"": ""{0}"", ""client_secret"": ""{1}"""
             Dim Body As String = String.Format(RawBody, ClientID, ClientSecret)
@@ -1370,6 +1383,7 @@ Public Class PowerwallService
         End Try
     End Function
     Function GetHashiCorpSecrets(Of JSONType)(API As String, Organisation As String, Project As String, Application As String, Bearer As String) As JSONType
+        EventLog.WriteEntry(String.Format("Entered Get Hashi Secrets"), EventLogEntryType.Information, 919)
         Try
             Dim URI As String = String.Format(API, Organisation, Project, Application)
             Dim request As WebRequest = WebRequest.Create(URI)

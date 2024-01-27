@@ -644,7 +644,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
         Public ReadOnly Property PWUseAutonomous() As Boolean
             Get
                 Return CType(Me("PWUseAutonomous"),Boolean)
@@ -680,7 +680,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
         Public ReadOnly Property IgnoreCertificates() As Boolean
             Get
                 Return CType(Me("IgnoreCertificates"),Boolean)
@@ -743,7 +743,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
         Public ReadOnly Property TariffSuperOffPeakActive() As Boolean
             Get
                 Return CType(Me("TariffSuperOffPeakActive"),Boolean)
@@ -752,7 +752,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
         Public ReadOnly Property PWAutoChargeMode() As Boolean
             Get
                 Return CType(Me("PWAutoChargeMode"),Boolean)
@@ -761,7 +761,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("False")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
         Public ReadOnly Property UseTeslaFleetAPI() As Boolean
             Get
                 Return CType(Me("UseTeslaFleetAPI"),Boolean)
@@ -770,7 +770,8 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("openid offline_access user_data vehicle_device_data energy_device_data energy_cmd"& _ 
+            "s")>  _
         Public ReadOnly Property TeslaFleetScope() As String
             Get
                 Return CType(Me("TeslaFleetScope"),String)
