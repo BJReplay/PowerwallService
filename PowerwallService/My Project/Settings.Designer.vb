@@ -689,29 +689,6 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.ConnectionString),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("Server=tcp:TODO.database.windows.net,1433;Initial Catalog=PWHistory;Persist Secur"& _ 
-            "ity Info=True;User ID=TODO;Password=TODO;MultipleActiveResultSets=False;Encrypt="& _ 
-            "True;TrustServerCertificate=False;Connection Timeout=30;")>  _
-        Public ReadOnly Property PWHistory() As String
-            Get
-                Return CType(Me("PWHistory"),String)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.ConnectionString),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("Data Source=TODO;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TOD"& _ 
-            "O;Password=TODO")>  _
-        Public ReadOnly Property PWHistoryLocal() As String
-            Get
-                Return CType(Me("PWHistoryLocal"),String)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
          Global.System.Configuration.DefaultSettingValueAttribute("True")>  _
         Public ReadOnly Property PWConsumptionToPeakStartUseHistory() As Boolean
             Get
@@ -794,24 +771,6 @@ Namespace My
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
          Global.System.Configuration.DefaultSettingValueAttribute("")>  _
-        Public ReadOnly Property TeslaFleetClientID() As String
-            Get
-                Return CType(Me("TeslaFleetClientID"),String)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
-        Public ReadOnly Property TeslaFleetClientSecret() As String
-            Get
-                Return CType(Me("TeslaFleetClientSecret"),String)
-            End Get
-        End Property
-        
-        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
-         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
         Public ReadOnly Property TeslaFleetScope() As String
             Get
                 Return CType(Me("TeslaFleetScope"),String)
@@ -824,6 +783,29 @@ Namespace My
         Public ReadOnly Property TeslaFleetAPI() As String
             Get
                 Return CType(Me("TeslaFleetAPI"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.ConnectionString),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("Server=tcp:TODO.database.windows.net,1433;Initial Catalog=PWHistory;Persist Secur"& _ 
+            "ity Info=True;User ID=TODO;Password=TODO;MultipleActiveResultSets=False;Encrypt="& _ 
+            "True;TrustServerCertificate=False;Connection Timeout=30;")>  _
+        Public ReadOnly Property PWHistory() As String
+            Get
+                Return CType(Me("PWHistory"),String)
+            End Get
+        End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.SpecialSettingAttribute(Global.System.Configuration.SpecialSetting.ConnectionString),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("Data Source=TODO;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TOD"& _ 
+            "O;Password=TODO")>  _
+        Public ReadOnly Property PWHistoryLocal() As String
+            Get
+                Return CType(Me("PWHistoryLocal"),String)
             End Get
         End Property
     End Class

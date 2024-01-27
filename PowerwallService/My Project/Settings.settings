@@ -215,20 +215,6 @@
     <Setting Name="IgnoreCertificates" Type="System.Boolean" Scope="Application">
       <Value Profile="(Default)">False</Value>
     </Setting>
-    <Setting Name="PWHistory" Type="(Connection string)" Scope="Application">
-      <DesignTimeValue Profile="(Default)">&lt;?xml version="1.0" encoding="utf-16"?&gt;
-&lt;SerializableConnectionString xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"&gt;
-  &lt;ConnectionString&gt;Server=tcp:TODO.database.windows.net,1433;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;&lt;/ConnectionString&gt;
-&lt;/SerializableConnectionString&gt;</DesignTimeValue>
-      <Value Profile="(Default)">Server=tcp:TODO.database.windows.net,1433;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;</Value>
-    </Setting>
-    <Setting Name="PWHistoryLocal" Type="(Connection string)" Scope="Application">
-      <DesignTimeValue Profile="(Default)">&lt;?xml version="1.0" encoding="utf-16"?&gt;
-&lt;SerializableConnectionString xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"&gt;
-  &lt;ConnectionString&gt;Data Source=TODO;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO&lt;/ConnectionString&gt;
-&lt;/SerializableConnectionString&gt;</DesignTimeValue>
-      <Value Profile="(Default)">Data Source=TODO;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO</Value>
-    </Setting>
     <Setting Name="PWConsumptionToPeakStartUseHistory" Type="System.Boolean" Scope="Application">
       <Value Profile="(Default)">True</Value>
     </Setting>
@@ -256,17 +242,25 @@
     <Setting Name="UseTeslaFleetAPI" Type="System.Boolean" Scope="Application">
       <Value Profile="(Default)">False</Value>
     </Setting>
-    <Setting Name="TeslaFleetClientID" Type="System.String" Scope="Application">
-      <Value Profile="(Default)" />
-    </Setting>
-    <Setting Name="TeslaFleetClientSecret" Type="System.String" Scope="Application">
-      <Value Profile="(Default)" />
-    </Setting>
     <Setting Name="TeslaFleetScope" Type="System.String" Scope="Application">
       <Value Profile="(Default)" />
     </Setting>
     <Setting Name="TeslaFleetAPI" Type="System.String" Scope="Application">
       <Value Profile="(Default)">https://fleet-api.prd.na.vn.cloud.tesla.com/</Value>
+    </Setting>
+    <Setting Name="PWHistory" Type="(Connection string)" Scope="Application">
+      <DesignTimeValue Profile="(Default)">&lt;?xml version="1.0" encoding="utf-16"?&gt;
+&lt;SerializableConnectionString xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"&gt;
+  &lt;ConnectionString&gt;Server=tcp:TODO.database.windows.net,1433;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;&lt;/ConnectionString&gt;
+&lt;/SerializableConnectionString&gt;</DesignTimeValue>
+      <Value Profile="(Default)">Server=tcp:TODO.database.windows.net,1433;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;</Value>
+    </Setting>
+    <Setting Name="PWHistoryLocal" Type="(Connection string)" Scope="Application">
+      <DesignTimeValue Profile="(Default)">&lt;?xml version="1.0" encoding="utf-16"?&gt;
+&lt;SerializableConnectionString xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"&gt;
+  &lt;ConnectionString&gt;Data Source=TODO;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO&lt;/ConnectionString&gt;
+&lt;/SerializableConnectionString&gt;</DesignTimeValue>
+      <Value Profile="(Default)">Data Source=TODO;Initial Catalog=PWHistory;Persist Security Info=True;User ID=TODO;Password=TODO</Value>
     </Setting>
   </Settings>
 </SettingsFile>

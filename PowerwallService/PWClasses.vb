@@ -418,4 +418,47 @@ Public Class PowerBIStreaming
         Public Property PeakConsumption As Single
     End Class
 End Class
+Public Class HashiCorp
+    Public Class HashiToken
+        Public Property access_token As String
+        Public Property expires_in As Integer
+        Public Property token_type As String
+    End Class
 
+    Public Class SecretsList
+        Public Property secrets() As List(Of Secret)
+    End Class
+
+    Public Class Secret
+        Public Property name As String
+        Public Property version As Version
+        Public Property created_at As Date
+        Public Property latest_version As String
+        Public Property created_by As Created_By1
+        Public Property sync_status As Sync_Status
+    End Class
+
+    Public Class Version
+        Public Property version As String
+        Public Property type As String
+        Public Property created_at As Date
+        Public Property value As String
+        Public Property created_by As Created_By
+    End Class
+
+    Public Class Created_By
+        Public Property name As String
+        Public Property type As String
+        Public Property email As String
+    End Class
+
+    Public Class Created_By1
+        Public Property name As String
+        Public Property type As String
+        Public Property email As String
+    End Class
+
+    Public Class Sync_Status
+    End Class
+
+End Class

@@ -2,6 +2,7 @@
 Imports System.Net
 Imports System.IO
 Imports System.Text
+Imports System.Reflection
 Imports Newtonsoft.Json
 Imports PowerwallService.PWJson
 Imports PowerwallService.SolCast
@@ -90,6 +91,8 @@ Public Class PowerwallService
     Shared SuperOffPeakEnd As DateTime
     Shared SuperOffPeakEndHour As Integer
     Shared SuperOffPeakHours As Double
+    Shared TeslaFleetClientID As String
+    Shared TeslaFleetClientSecret As String
 #End Region
 #Region "Timer Handlers"
     Protected Async Sub OnSixSecondTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
@@ -165,6 +168,7 @@ Public Class PowerwallService
     End Sub
     Private Sub DoAsyncStartupProcesses()
         Threading.Thread.Sleep(10000)
+        GetTeslaFleetClientCredentials()
         GetSavedPWRefreshToken()
         SetOffPeakHours(Now)
         If My.Settings.PWUseAutonomous Then
@@ -248,7 +252,7 @@ Public Class PowerwallService
     Function ReadAppSetting(key As String) As String
         Dim result As String = String.Empty
         Try
-            Dim appSettings = ConfigurationManager.AppSettings
+            Dim appSettings = System.Configuration.ConfigurationManager.AppSettings
             result = appSettings(key)
             If IsNothing(result) Then
                 result = String.Empty
@@ -260,7 +264,7 @@ Public Class PowerwallService
     End Function
     Sub AddUpdateAppSettings(key As String, value As String)
         Try
-            Dim configFile = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None)
+            Dim configFile = System.Configuration.ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None)
             Dim settings = configFile.AppSettings.Settings
             If IsNothing(settings(key)) Then
                 settings.Add(key, value)
@@ -268,7 +272,7 @@ Public Class PowerwallService
                 settings(key).Value = value
             End If
             configFile.Save(ConfigurationSaveMode.Modified)
-            ConfigurationManager.RefreshSection(configFile.AppSettings.SectionInformation.Name)
+            System.Configuration.ConfigurationManager.RefreshSection(configFile.AppSettings.SectionInformation.Name)
         Catch e As ConfigurationErrorsException
             EventLog.WriteEntry(String.Format("Error Writing Generic Application Setting {0} '{1}': {2} - {3}", key, value, e.BareMessage, e.Source), EventLogEntryType.Error, 908)
         End Try
@@ -1177,6 +1181,28 @@ Public Class PowerwallService
         End If
         Return PWLocalToken
     End Function
+    Sub GetTeslaFleetClientCredentials()
+        Dim HashiCreds As HashiCorp.HashiToken
+        Dim Target As String = "https://auth.hashicorp.com/oauth/token"
+        Dim ClientID As String = "ZEuAUHWzzTHdCNVf46PNb7H95smsG0r3"
+        Dim ClientSecret As String = "8RkAWdS9tHuptM2YIik1Ph1OcxJ6FN-km2Zqzwu0Oje2DSKoHtlP_wUAVW-pOLGq"
+        HashiCreds = GetHashiCorpAT(Of HashiCorp.HashiToken)(Target, ClientID, ClientSecret)
+
+        Dim BaseAPI As String = "https://api.cloud.hashicorp.com/secrets/2023-06-13/organizations/{0}/projects/{1}/apps/{2}/open"
+        Dim Organisation As String = "6efe8f75-e487-41e8-8665-5116246ae562"
+        Dim Project As String = "456bed00-a8cc-4080-88e8-e6c919228fd8"
+        Dim Application As String = "PowerwallService-TeslaFleetAPI"
+        Dim HashiSecrets As HashiCorp.SecretsList
+        HashiSecrets = GetHashiCorpSecrets(Of HashiCorp.SecretsList)(BaseAPI, Organisation, Project, Application, HashiCreds.access_token)
+
+        For Each Secret As HashiCorp.Secret In HashiSecrets.secrets
+            With Secret
+                If .name = "TeslaFleetClientSecret" Then TeslaFleetClientSecret = .version.value
+                If .name = "TeslaFleetClientID" Then TeslaFleetClientID = .version.value
+            End With
+        Next
+
+    End Sub
     Sub GetSavedPWRefreshToken()
         Dim LocalRefreshToken As String = ReadAppSetting("PWCloudRefreshToken")
         If LocalRefreshToken <> String.Empty Then
@@ -1249,7 +1275,7 @@ Public Class PowerwallService
     Function RefreshFleetTokens() As String
         Try
             PWCloudTokenExpires = DateAdd(DateInterval.Hour, -1, Now)
-            Dim AuthHelper As New TeslaAuthHelper(TeslaAccountRegion.USA, My.Settings.TeslaFleetClientID, My.Settings.TeslaFleetClientSecret, My.Settings.TeslaFleetScope, My.Application.Info.Version.ToString)
+            Dim AuthHelper As New TeslaAuthHelper(TeslaAccountRegion.USA, TeslaFleetClientID, TeslaFleetClientSecret, My.Settings.TeslaFleetScope, My.Application.Info.Version.ToString)
             With AuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result
                 PWCloudToken = .AccessToken
                 PWCloudRefreshToken = .RefreshToken
@@ -1308,6 +1334,63 @@ Public Class PowerwallService
         Catch Ex As Exception
             EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
             Return Nothing
+        End Try
+    End Function
+    Function GetHashiCorpAT(Of JSONType)(URL As String, ClientID As String, ClientSecret As String) As JSONType
+        Try
+            Dim RawBody As String = """audience"": ""https://api.hashicorp.cloud"", ""grant_type"": ""client_credentials"", ""client_id"": ""{0}"", ""client_secret"": ""{1}"""
+            Dim Body As String = String.Format(RawBody, ClientID, ClientSecret)
+            Body = "{" & Body & "}"
+            Dim BodyPostData As String = JsonConvert.SerializeObject(Body).ToString
+            '            Dim BodyByteStream As Byte() = Encoding.UTF8.GetBytes(BodyPostData)
+            Dim BodyByteStream As Byte() = Encoding.UTF8.GetBytes(Body)
+            Dim request As WebRequest = WebRequest.Create(URL)
+            request.Method = "POST"
+            request.ContentType = "application/json"
+            request.ContentLength = BodyByteStream.Length
+            Dim BodyStream As Stream = request.GetRequestStream()
+            BodyStream.Write(BodyByteStream, 0, BodyByteStream.Length)
+            BodyStream.Close()
+            Dim response As HttpWebResponse
+            response = CType(request.GetResponse(), HttpWebResponse)
+            If response IsNot Nothing Then
+                Dim dataStream As Stream = response.GetResponseStream()
+                Dim reader As New StreamReader(dataStream)
+                Dim responseFromServer As String = reader.ReadToEnd()
+                reader.Close()
+                response.Close()
+                Return JsonConvert.DeserializeObject(Of JSONType)(responseFromServer)
+            Else
+                EventLog.WriteEntry("Error retrieving Hashi Tokens - Not Found", EventLogEntryType.Error, 906)
+                Return Nothing
+            End If
+        Catch Ex As Exception
+            EventLog.WriteEntry("Error retrieving Hashi Tokens" & Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 906)
+            Return Nothing
+        End Try
+    End Function
+    Function GetHashiCorpSecrets(Of JSONType)(API As String, Organisation As String, Project As String, Application As String, Bearer As String) As JSONType
+        Try
+            Dim URI As String = String.Format(API, Organisation, Project, Application)
+            Dim request As WebRequest = WebRequest.Create(URI)
+            request.Headers.Add("Authorization", "Bearer " & Bearer)
+            Dim response As HttpWebResponse
+            Try
+                response = CType(request.GetResponse(), HttpWebResponse)
+            Catch WebEx As WebException
+                Dim ExResponseCode As HttpStatusCode = CType(WebEx.Response, HttpWebResponse).StatusCode
+                EventLog.WriteEntry(String.Format("Unexpected error calling Hashi API {0} with response status code: {1}", API, ExResponseCode), EventLogEntryType.Error, 909)
+                EventLog.WriteEntry(WebEx.Message & vbCrLf & vbCrLf & WebEx.StackTrace, EventLogEntryType.Error)
+                Throw WebEx
+            End Try
+            Dim dataStream As Stream = response.GetResponseStream()
+            Dim reader As New StreamReader(dataStream)
+            Dim responseFromServer As String = reader.ReadToEnd()
+            GetHashiCorpSecrets = JsonConvert.DeserializeObject(Of JSONType)(responseFromServer)
+            reader.Close()
+            response.Close()
+        Catch Ex As Exception
+            EventLog.WriteEntry("Unexpected error retrieving Hashi Secrets" & Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 909)
         End Try
     End Function
 #End Region
