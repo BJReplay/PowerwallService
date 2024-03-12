@@ -9,6 +9,7 @@ Imports PowerwallService.SolCast
 Imports PowerwallService.PVOutput
 Imports PowerwallService.SunriseSunset
 Imports PowerwallService.PowerBIStreaming
+Imports PowerwallService.HomeAssistant
 Imports TeslaAuth
 Imports System.Configuration
 #End Region
@@ -434,7 +435,11 @@ Public Class PowerwallService
         End If
         GetForecasts()
         If My.Settings.PWControlEnabled Then
-            CheckSOCLevel()
+            Dim OverrideEntity As EntityState.Entity
+            OverrideEntity = GetOverrideForecast(Of EntityState.Entity)()
+            If OverrideEntity.state = "off" Or IsNothing(OverrideEntity) Then
+                CheckSOCLevel()
+            End If
         End If
     End Sub
     Private Sub DoDailyTasks()
@@ -466,19 +471,29 @@ Public Class PowerwallService
             Return Nothing
         End Try
     End Function
-    Function GetUnsecured(URI As String) As Integer
-        Try
-            Dim request As WebRequest = WebRequest.Create(URI)
-            Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
-            GetUnsecured = response.StatusCode
-            response.Close()
-        Catch Ex As Exception
-            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
-            Return 0
-        End Try
-    End Function
     Function GetSunriseSunset(Of JSONType)(AsAt As Date) As JSONType
         Return GetUnsecuredJSONResult(Of JSONType)(String.Format("https://api.sunrise-sunset.org/json?lat={0}&lng={1}&formatted=0&date={2:yyyy-MM-dd}", My.Settings.PVSystemLattitude, My.Settings.PVSystemLongitude, AsAt))
+    End Function
+    Function GetOverrideForecast(Of JSONType)() As JSONType
+        If My.Settings.UseHA Then
+            Try
+                Dim BaseAPI As String = My.Settings.HAHost
+                Dim request As WebRequest = WebRequest.Create(BaseAPI & My.Settings.HAOverrideForecast)
+                request.Headers.Add("Authorization", "Bearer " & My.Settings.HABearer)
+                Dim response As HttpWebResponse
+                response = CType(request.GetResponse(), HttpWebResponse)
+                Dim dataStream As Stream = response.GetResponseStream()
+                Dim reader As New StreamReader(dataStream)
+                Dim responseFromServer As String = reader.ReadToEnd()
+                GetOverrideForecast = JsonConvert.DeserializeObject(Of JSONType)(responseFromServer)
+                reader.Close()
+                response.Close()
+            Catch Ex As Exception
+                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+            End Try
+        Else
+            Return Nothing
+        End If
     End Function
     Function CheckSunIsUp(AsAt As Date) As Boolean
         If AsAt.Date = Now.Date Then
