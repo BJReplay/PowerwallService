@@ -469,15 +469,10 @@ Public Class HomeAssistant
         Public Class Entity
             Public Property entity_id As String
             Public Property state As String
-            Public Property attributes As Attributes
+            Public Property attributes As Object
             Public Property last_changed As Date
             Public Property last_updated As Date
             Public Property context As Context
-        End Class
-        Public Class Attributes
-            Public Property editable As Boolean
-            Public Property icon As String
-            Public Property friendly_name As String
         End Class
         Public Class Context
             Public Property id As String

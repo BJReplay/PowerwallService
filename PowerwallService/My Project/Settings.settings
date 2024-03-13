@@ -274,5 +274,8 @@
     <Setting Name="UseHA" Type="System.Boolean" Scope="Application">
       <Value Profile="(Default)">False</Value>
     </Setting>
+    <Setting Name="HAChargeTarget" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">states/input_number.charge_target</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

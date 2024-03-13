@@ -845,6 +845,15 @@ Namespace My
                 Return CType(Me("UseHA"),Boolean)
             End Get
         End Property
+        
+        <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("states/input_number.charge_target")>  _
+        Public ReadOnly Property HAChargeTarget() As String
+            Get
+                Return CType(Me("HAChargeTarget"),String)
+            End Get
+        End Property
     End Class
 End Namespace
 
