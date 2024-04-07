@@ -2,7 +2,6 @@
 Imports System.Net
 Imports System.IO
 Imports System.Text
-Imports System.Reflection
 Imports Newtonsoft.Json
 Imports PowerwallService.PWJson
 Imports PowerwallService.SolCast
@@ -472,9 +471,9 @@ Public Class PowerwallService
     End Function
 #Region "Home Assistant"
     Function PostHANumber(EntityID As String, Number As Single) As Integer
-        Dim JSONStruct As New HomeAssistant.PostState
+        Dim JSONStruct As New PostState
         JSONStruct.state = CStr(Number)
-        PostHANumber = PostHAStateEntity(Of HomeAssistant.PostState)(EntityID, JSONStruct)
+        PostHANumber = PostHAStateEntity(Of PostState)(EntityID, JSONStruct)
     End Function
     Function PostHAStateEntity(Of JSONType)(EntityID As String, Data As JSONType) As Integer
         If My.Settings.UseHA Then
