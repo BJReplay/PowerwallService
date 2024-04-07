@@ -465,6 +465,9 @@ Public Class HashiCorp
 
 End Class
 Public Class HomeAssistant
+    Public Class PostState
+        Public Property state As String
+    End Class
     Public Class EntityState
         Public Class Entity
             Public Property entity_id As String

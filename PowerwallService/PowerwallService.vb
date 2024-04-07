@@ -470,11 +470,42 @@ Public Class PowerwallService
     Function GetSunriseSunset(Of JSONType)(AsAt As Date) As JSONType
         Return GetUnsecuredJSONResult(Of JSONType)(String.Format("https://api.sunrise-sunset.org/json?lat={0}&lng={1}&formatted=0&date={2:yyyy-MM-dd}", My.Settings.PVSystemLattitude, My.Settings.PVSystemLongitude, AsAt))
     End Function
+#Region "Home Assistant"
+    Function PostHANumber(EntityID As String, Number As Single) As Integer
+        Dim JSONStruct As New HomeAssistant.PostState
+        JSONStruct.state = CStr(Number)
+        PostHANumber = PostHAStateEntity(Of HomeAssistant.PostState)(EntityID, JSONStruct)
+    End Function
+    Function PostHAStateEntity(Of JSONType)(EntityID As String, Data As JSONType) As Integer
+        If My.Settings.UseHA Then
+            Try
+                Dim BaseAPI As String = My.Settings.HAHost
+                Dim request As WebRequest = WebRequest.Create(BaseAPI & "states/" & EntityID)
+                request.Headers.Add("Authorization", "Bearer " & My.Settings.HABearer)
+                Dim BodyPostData As String = JsonConvert.SerializeObject(Data).ToString
+                Dim BodyByteStream As Byte() = Encoding.UTF8.GetBytes(BodyPostData)
+                request.Method = "POST"
+                request.ContentType = "application/json"
+                request.ContentLength = BodyByteStream.Length
+                Dim BodyStream As Stream = request.GetRequestStream()
+                BodyStream.Write(BodyByteStream, 0, BodyByteStream.Length)
+                BodyStream.Close()
+                Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
+                PostHAStateEntity = response.StatusCode
+                response.Close()
+            Catch Ex As Exception
+                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error)
+                Return 0
+            End Try
+        Else
+            Return 0
+        End If
+    End Function
     Function GetHAStateEntity(Of JSONType)(EntityID As String) As JSONType
         If My.Settings.UseHA Then
             Try
                 Dim BaseAPI As String = My.Settings.HAHost
-                Dim request As WebRequest = WebRequest.Create(BaseAPI & EntityID)
+                Dim request As WebRequest = WebRequest.Create(BaseAPI & "states/" & EntityID)
                 request.Headers.Add("Authorization", "Bearer " & My.Settings.HABearer)
                 Dim response As HttpWebResponse
                 response = CType(request.GetResponse(), HttpWebResponse)
@@ -491,6 +522,8 @@ Public Class PowerwallService
             Return Nothing
         End If
     End Function
+#End Region
+
     Function CheckSunIsUp(AsAt As Date) As Boolean
         If AsAt.Date = Now.Date Then
             If AsAt > CivilTwilightSunrise And AsAt < CivilTwilightSunset Then Return True
@@ -754,6 +787,17 @@ Public Class PowerwallService
                 Dim PowerBIPostResult As Integer = PostPowerBIStreamingData(My.Settings.PBIChargeIntentEndpoint, PBIRows)
             Catch ex As Exception
                 EventLog.WriteEntry(String.Format("Failed to write Charge Plan to Power BI: Ex:{0} ({1})", ex.GetType, ex.Message), EventLogEntryType.Warning, 911)
+            End Try
+        End If
+        If My.Settings.UseHA Then
+            Try
+                Dim HARemainingNight As Integer = PostHANumber("input_number.remaining_night", RemainingOffPeak)
+                Dim HARemainingOffPeak As Integer = PostHANumber("input_number.remaining_off_peak", RemainingToPeak)
+                Dim HARemainingPeak As Integer = PostHANumber("input_number.remaining_peak", PWPeakConsumption)
+                Dim HARequiredSOC As Integer = PostHANumber("input_number.required_soc", NewTarget)
+                Dim HAShortfall As Integer = PostHANumber("input_number.shortfall", ShortfallInsolation)
+            Catch ex As Exception
+
             End Try
         End If
     End Sub

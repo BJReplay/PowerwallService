@@ -266,7 +266,7 @@
       <Value Profile="(Default)">http://wsl2:8123/api/</Value>
     </Setting>
     <Setting Name="HAOverrideForecast" Type="System.String" Scope="Application">
-      <Value Profile="(Default)">states/input_boolean.override_forecast</Value>
+      <Value Profile="(Default)">input_boolean.override_forecast</Value>
     </Setting>
     <Setting Name="HABearer" Type="System.String" Scope="Application">
       <Value Profile="(Default)">TODO</Value>
@@ -275,7 +275,7 @@
       <Value Profile="(Default)">False</Value>
     </Setting>
     <Setting Name="HAChargeTarget" Type="System.String" Scope="Application">
-      <Value Profile="(Default)">states/input_number.charge_target</Value>
+      <Value Profile="(Default)">input_number.charge_target</Value>
     </Setting>
   </Settings>
 </SettingsFile>

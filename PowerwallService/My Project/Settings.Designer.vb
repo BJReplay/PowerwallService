@@ -821,7 +821,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("states/input_boolean.override_forecast")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("input_boolean.override_forecast")>  _
         Public ReadOnly Property HAOverrideForecast() As String
             Get
                 Return CType(Me("HAOverrideForecast"),String)
@@ -848,7 +848,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("states/input_number.charge_target")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("input_number.charge_target")>  _
         Public ReadOnly Property HAChargeTarget() As String
             Get
                 Return CType(Me("HAChargeTarget"),String)
