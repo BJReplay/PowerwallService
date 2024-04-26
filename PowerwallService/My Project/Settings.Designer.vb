@@ -770,8 +770,7 @@ Namespace My
         
         <Global.System.Configuration.ApplicationScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("openid offline_access user_data vehicle_device_data energy_device_data energy_cmd"& _ 
-            "s")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("openid offline_access user_data energy_device_data energy_cmds")>  _
         Public ReadOnly Property TeslaFleetScope() As String
             Get
                 Return CType(Me("TeslaFleetScope"),String)

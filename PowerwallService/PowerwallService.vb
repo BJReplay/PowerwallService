@@ -93,6 +93,7 @@ Public Class PowerwallService
     Shared SuperOffPeakHours As Double
     Shared TeslaFleetClientID As String
     Shared TeslaFleetClientSecret As String
+    Shared TeslsFleetRedirectURI As String
 #End Region
 #Region "Timer Handlers"
     Protected Async Sub OnSixSecondTimer(Sender As Object, Args As System.Timers.ElapsedEventArgs)
@@ -1278,6 +1279,10 @@ Public Class PowerwallService
                     TeslaFleetClientID = .version.value
                     If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Got TeslaFleetClientID"), EventLogEntryType.Information, 917)
                 End If
+                If .name = "TeslsFleetRedirectURI" Then
+                    TeslsFleetRedirectURI = .version.value
+                    If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Got TeslsFleetRedirectURI"), EventLogEntryType.Information, 921)
+                End If
             End With
         Next
 
@@ -1312,7 +1317,7 @@ Public Class PowerwallService
         If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Entered Token Helper"), EventLogEntryType.Information, 920)
         If PWCloudTokenExpires < DateAdd(DateInterval.Minute, 30, Now) Then
             If My.Settings.UseTeslaFleetAPI Then
-                Retval = RefreshFleetTokens()
+                Retval = RefreshFleetTokens().Result
             Else
                 Retval = RefreshTokens()
             End If
@@ -1353,19 +1358,19 @@ Public Class PowerwallService
         End If
         Return PWCloudToken
     End Function
-    Function RefreshFleetTokens() As String
+    Async Function RefreshFleetTokens() As Task(Of String)
         If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Entered Fleet Token Refresh"), EventLogEntryType.Information, 911)
         Try
             PWCloudTokenExpires = DateAdd(DateInterval.Hour, -1, Now)
-            Dim AuthHelper As New TeslaAuthHelper(TeslaAccountRegion.USA, TeslaFleetClientID, TeslaFleetClientSecret, My.Settings.TeslaFleetScope, My.Application.Info.Version.ToString)
-            With AuthHelper.RefreshTokenAsync(PWCloudRefreshToken).Result
+            Dim AuthHelper As New TeslaAuthHelper(region:=TeslaAccountRegion.USA, clientId:=TeslaFleetClientID, clientSecret:=TeslaFleetClientSecret, redirectUri:=TeslsFleetRedirectURI, scopes:=My.Settings.TeslaFleetScope, userAgent:=My.Application.Info.Version.ToString)
+            Dim ResultTokens As Tokens = Await AuthHelper.RefreshTokenAsync(PWCloudRefreshToken)
+            With ResultTokens
                 PWCloudToken = .AccessToken
                 PWCloudRefreshToken = .RefreshToken
                 PWCloudTokenExpires += .ExpiresIn
 
                 AddUpdateAppSettings("PWCloudToken", PWCloudToken)
                 AddUpdateAppSettings("PWCloudRefreshToken", PWCloudRefreshToken)
-
             End With
             If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Initial Access Token: {0}", PWCloudToken), EventLogEntryType.Information, 900)
             If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Initial Refresh Token: {0}", PWCloudRefreshToken), EventLogEntryType.Information, 901)
