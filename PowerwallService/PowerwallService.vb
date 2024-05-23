@@ -634,6 +634,7 @@ Public Class PowerwallService
             Else
                 ChargeBuffer -= CInt(SuperOffPeakHours * ChargeSpeed / 13 * 100)
             End If
+            If ChargeBuffer < 0 Then ChargeBuffer = 0
         End If
         RawOffPeak = PWOvernightConsumption
         If InvokedTime <= Sunset Then
