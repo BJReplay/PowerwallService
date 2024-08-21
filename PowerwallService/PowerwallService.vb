@@ -802,7 +802,7 @@ Public Class PowerwallService
         End If
 
         If LocalTimerMode Then
-            If InvokedTime >= DateAdd(DateInterval.Minute, -3, TimerModeEndTime) Then
+            If InvokedTime >= DateAdd(DateInterval.Minute, -6, TimerModeEndTime) Then
                 OperationLockout = TimerModeEndTime
                 EventLog.WriteEntry(String.Format("Reaching end of timer mode with SOC={0}, was aiming for Target={1}", SOC.percentage, NewTarget), EventLogEntryType.Information, 515)
                 DoExitCharging(Intent)
