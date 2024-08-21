@@ -277,5 +277,14 @@
     <Setting Name="HAChargeTarget" Type="System.String" Scope="Application">
       <Value Profile="(Default)">input_number.charge_target</Value>
     </Setting>
+    <Setting Name="HAChargeWindowStart" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">input_datetime.off_peak_energy_start</Value>
+    </Setting>
+    <Setting Name="HAChargeWindowEnd" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">input_datetime.off_peak_energy_end</Value>
+    </Setting>
+    <Setting Name="HATimerMode" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">input_boolean.timer_mode</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

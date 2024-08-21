@@ -26,6 +26,14 @@ Public Class PowerwallService
     Const AppToLocalRatio As Decimal = CDec(95 / 100)
     Private DischargeMode As String = self_consumption
     Private ChargeSpeed As Single = 1.7
+    Private TimerModeWindowFetched As Boolean = False
+    Private TimerModeStart As EntityState.Entity
+    Private TimerModeStartTime As DateTime
+    Private TimerModeStartHour As Integer
+    Private TimerModeEnd As EntityState.Entity
+    Private TimerModeEndTime As DateTime
+    Private TimerModeEndHour As Integer
+    Private TimerModeHours As Integer
     Private ReadOnly ObsTA As New PWHistoryDataSetTableAdapters.observationsTableAdapter
     Private ReadOnly SolarTA As New PWHistoryDataSetTableAdapters.solarTableAdapter
     Private ReadOnly SOCTA As New PWHistoryDataSetTableAdapters.socTableAdapter
@@ -335,14 +343,15 @@ Public Class PowerwallService
             If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Off Peak End {0:yyyy-MM-dd HH:mm}", PeakStart), EventLogEntryType.Information, 711)
         End If
         If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Off Peak Start: {0:yyyy-MM-dd HH:mm} End: {1:yyyy-MM-dd HH:mm}", OffPeakStart, PeakStart), EventLogEntryType.Information, 713)
+
         If My.Settings.TariffSuperOffPeakActive Then
             SuperOffPeakStartHour = My.Settings.TariffSuperOffPeakStart
             SuperOffPeakEndHour = My.Settings.TariffSuperOffPeakEnd
             If My.Settings.TariffIgnoresDST And TZI.IsDaylightSavingTime(InvokedTime) Then
-                OffPeakStartHour += CByte(1)
-                If OffPeakStartHour > 23 Then OffPeakStartHour -= CByte(24)
-                PeakStartHour += CByte(1)
-                If PeakStartHour > 23 Then PeakStartHour -= CByte(24)
+                SuperOffPeakStartHour += CByte(1)
+                If SuperOffPeakStartHour > 23 Then SuperOffPeakStartHour -= CByte(24)
+                SuperOffPeakEndHour += CByte(1)
+                If SuperOffPeakEndHour > 23 Then SuperOffPeakEndHour -= CByte(24)
             End If
             If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Super Off Peak Hours From {0} To {1}", SuperOffPeakStartHour, SuperOffPeakEndHour), EventLogEntryType.Information, 704)
             SuperOffPeakHours = SuperOffPeakEndHour - SuperOffPeakStartHour
@@ -368,6 +377,45 @@ Public Class PowerwallService
             End If
             If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Super Off Peak Start: {0:yyyy-MM-dd HH:mm} End: {1:yyyy-MM-dd HH:mm}", SuperOffPeakStart, SuperOffPeakEnd), EventLogEntryType.Information, 718)
         End If
+
+        If TimerModeWindowFetched Then
+            TimerModeStartTime = New DateTime(InvokedTime.Year, InvokedTime.Month, InvokedTime.Day, CInt(Left(TimerModeStart.state, 2)), CInt(Mid(TimerModeStart.state, 4, 2)), CInt(Right(TimerModeStart.state, 2)))
+            TimerModeEndTime = New DateTime(InvokedTime.Year, InvokedTime.Month, InvokedTime.Day, CInt(Left(TimerModeEnd.state, 2)), CInt(Mid(TimerModeEnd.state, 4, 2)), CInt(Right(TimerModeEnd.state, 2)))
+
+            TimerModeStartHour = Hour(TimerModeStartTime)
+            TimerModeEndHour = Hour(TimerModeEndTime)
+
+            If My.Settings.TariffIgnoresDST And TZI.IsDaylightSavingTime(InvokedTime) Then
+                TimerModeStartHour += CByte(1)
+                If TimerModeStartHour > 23 Then TimerModeStartHour -= CByte(24)
+                TimerModeEndHour += CByte(1)
+                If TimerModeEndHour > 23 Then TimerModeEndHour -= CByte(24)
+            End If
+
+            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Timer Mode Hours From {0} To {1}", TimerModeStartHour, TimerModeEndHour), EventLogEntryType.Information, 719)
+            TimerModeHours = SuperOffPeakEndHour - SuperOffPeakStartHour
+            If TimerModeHours <= 0 Then SuperOffPeakHours += 24
+
+            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Mode Hours Duration {0}", TimerModeHours), EventLogEntryType.Information, 720)
+            If InvokedTime.Hour >= TimerModeEndHour Then
+                TimerModeStartTime = DateAdd(DateInterval.Day, 1, TimerModeStartTime)
+                TimerModeEndTime = DateAdd(DateInterval.Day, 1, TimerModeEndTime)
+                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Timer Mode Start {0:yyyy-MM-dd HH:mm}", TimerModeStartTime), EventLogEntryType.Information, 721)
+                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Timer Mode End {0:yyyy-MM-dd HH:mm}", TimerModeEndTime), EventLogEntryType.Information, 722)
+            End If
+            If InvokedTime.Hour >= 0 And InvokedTime.Hour < TimerModeStartHour + 1 Then
+                TimerModeStartTime = DateAdd(DateInterval.Day, -1, TimerModeStartTime)
+                If TimerModeStartTime.Day < InvokedTime.Day Or TimerModeStartTime.Month < InvokedTime.Month Then TimerModeStartTime = DateAdd(DateInterval.Day, 1, TimerModeStartTime)
+                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Timer Mode Start {0:yyyy-MM-dd HH:mm}", TimerModeStartTime), EventLogEntryType.Information, 723)
+            End If
+            If InvokedTime.Hour >= 0 And InvokedTime.Hour < TimerModeEndHour Then
+                TimerModeEndTime = DateAdd(DateInterval.Day, -1, TimerModeEndTime)
+                If TimerModeEndTime.Day < InvokedTime.Day Or TimerModeEndTime.Month < InvokedTime.Month Then TimerModeEndTime = DateAdd(DateInterval.Day, 1, TimerModeEndTime)
+                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Adjusted Timer Mode End {0:yyyy-MM-dd HH:mm}", TimerModeEndTime), EventLogEntryType.Information, 724)
+            End If
+            If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("Super Timer Mode: {0:yyyy-MM-dd HH:mm} End: {1:yyyy-MM-dd HH:mm}", TimerModeStartTime, TimerModeEndTime), EventLogEntryType.Information, 725)
+        End If
+
         If Sunrise.Date <> InvokedTime.Date Then
             Dim SunriseSunsetData As Result = GetSunriseSunset(Of Result)(InvokedTime)
             With SunriseSunsetData.results
@@ -424,6 +472,9 @@ Public Class PowerwallService
                 SendForecast()
             End If
         End If
+        If My.Settings.PWControlEnabled Then
+            CheckSOCLevel()
+        End If
     End Sub
     Private Sub DoTenMinuteTasks()
         If Now > PWCloudTokenExpires Then
@@ -434,9 +485,6 @@ Public Class PowerwallService
             GetObservationAndStore()
         End If
         GetForecasts()
-        If My.Settings.PWControlEnabled Then
-            CheckSOCLevel()
-        End If
     End Sub
     Private Sub DoDailyTasks()
         RefreshTokensHelper()
@@ -705,14 +753,29 @@ Public Class PowerwallService
         End If
 
         ' HA Override Here
+        Dim LocalTimerMode As Boolean = False
         If My.Settings.UseHA Then
             Dim OverrideEntity As EntityState.Entity
+            Dim TimerMode As EntityState.Entity
             OverrideEntity = GetHAStateEntity(Of EntityState.Entity)(My.Settings.HAOverrideForecast)
-            If OverrideEntity.state = "on" Then
+            TimerMode = GetHAStateEntity(Of EntityState.Entity)(My.Settings.HATimerMode)
+            If OverrideEntity.state = "on" Or TimerMode.state = "on" Then
                 Dim OverrideCharge As EntityState.Entity
                 OverrideCharge = GetHAStateEntity(Of EntityState.Entity)(My.Settings.HAChargeTarget)
                 NewTarget = CDec(OverrideCharge.state)
                 EventLog.WriteEntry(String.Format("Home Assistant Override Status: {0} - Target {1}", OverrideEntity.state, OverrideCharge.state), EventLogEntryType.Information, 930)
+                If TimerMode.state = "on" Then
+                    LocalTimerMode = True
+                    NewTarget = CInt(OverrideCharge.state)
+                    If Not TimerModeWindowFetched Then
+                        TimerModeStart = GetHAStateEntity(Of EntityState.Entity)(My.Settings.HAChargeWindowStart)
+                        TimerModeEnd = GetHAStateEntity(Of EntityState.Entity)(My.Settings.HAChargeWindowEnd)
+                        TimerModeWindowFetched = True
+                        SetOffPeakHours(Now)
+                        EventLog.WriteEntry(String.Format("Home Assistant Timer Mode Window Fetched: {0} - {1}", TimerModeStart.state, TimerModeEnd.state), EventLogEntryType.Information, 933)
+                    End If
+                    EventLog.WriteEntry(String.Format("Home Assistant Timer Mode: {0} - Target {1}", TimerMode.state, OverrideCharge.state), EventLogEntryType.Information, 930)
+                End If
             Else
                 EventLog.WriteEntry(String.Format("Home Assistant Override Status: {0}", OverrideEntity.state), EventLogEntryType.Information, 931)
             End If
@@ -737,50 +800,68 @@ Public Class PowerwallService
             ChargingIntent = False
             StandbyIntent = False
         End If
-        Try
-            If InvokedTime > DateAdd(DateInterval.Minute, -15, PeakStart) Then
-                OperationLockout = PeakStart
-                EventLog.WriteEntry(String.Format("Reaching end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, NewTarget), EventLogEntryType.Information, 504)
+
+        If LocalTimerMode Then
+            If InvokedTime >= DateAdd(DateInterval.Minute, -3, TimerModeEndTime) Then
+                OperationLockout = TimerModeEndTime
+                EventLog.WriteEntry(String.Format("Reaching end of timer mode with SOC={0}, was aiming for Target={1}", SOC.percentage, NewTarget), EventLogEntryType.Information, 515)
                 DoExitCharging(Intent)
-            ElseIf ((InvokedTime >= OffPeakStart And InvokedTime < PeakStart And InvokedTime > OperationLockout) Or (InvokedTime >= Sunrise And InvokedTime < PeakStart And InvokedTime > OperationLockout)) Then
-                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Minimum required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 500)
-                If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OffPeakStart, PeakStart), EventLogEntryType.Information, 714)
-                If StandbyIntent And InvokedTime >= Sunset And Not ChargingIntent Then
-                    If SetPWMode("Pre-Peak SOC would be below required SOC, Switching to Standby for Off Peak", "Enter", "Standby", NewTarget, DischargeMode, Intent) = 202 Then
-                        OnStandby = True
-                        PreCharging = False
-                    End If
-                ElseIf SOC.percentage >= NewTarget And StandbyIntent And Not ChargingIntent And InvokedTime >= Sunset Then
-                    EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 505)
-                    If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", NewTarget, DischargeMode, Intent) = 202 Then
-                        OnStandby = True
-                        PreCharging = False
-                    End If
-                ElseIf (LastTarget < NewTarget And OnStandby) Or (LastTarget < NewTarget And PreCharging) Or ChargingIntent Then
-                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
-                    If SetPWMode("Current SOC below required Pre-Peak SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
-                        PreCharging = True
-                        OnStandby = False
-                    End If
-                ElseIf (SOC.percentage < NewTarget) Or (LastTarget < NewTarget And Not ChargingIntent) Then
-                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting or Charging now Required: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 516)
-                    If SetPWMode("Current SOC below required Pre-Peak SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
-                        PreCharging = True
-                        OnStandby = False
-                    End If
-                ElseIf SOC.percentage >= NewTarget And Not ChargingIntent Then
-                    EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 502)
-                    If SetPWMode("Switching to Standby", "Enter", "Standby", NewTarget, DischargeMode, Intent) = 202 Then
-                        OnStandby = True
-                        PreCharging = False
-                    End If
+            ElseIf InvokedTime >= TimerModeStartTime And InvokedTime <= DateAdd(DateInterval.Minute, -10, TimerModeEndTime) Then
+                If SetPWMode("In timer mode with SOC of {0} with target of {1}", "Enter", "Charging", NewTarget, DischargeMode, "Timer Mode") = 202 Then
+                    PreCharging = True
+                    OnStandby = False
                 End If
             Else
-                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage), EventLogEntryType.Information, 503)
+                If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Timer Mode Period: SOC={0}", SOC.percentage), EventLogEntryType.Information, 517)
             End If
-        Catch Ex As Exception
-            EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 510)
-        End Try
+        Else
+            Try
+                If InvokedTime > DateAdd(DateInterval.Minute, -15, PeakStart) Then
+                    OperationLockout = PeakStart
+                    EventLog.WriteEntry(String.Format("Reaching end of off-peak period with SOC={0}, was aiming for Target={1}", SOC.percentage, NewTarget), EventLogEntryType.Information, 504)
+                    DoExitCharging(Intent)
+                ElseIf ((InvokedTime >= OffPeakStart And InvokedTime < PeakStart And InvokedTime > OperationLockout) Or (InvokedTime >= Sunrise And InvokedTime < PeakStart And InvokedTime > OperationLockout)) Then
+                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Current SOC={0}, Minimum required at end of Off-Peak={1}, Shortfall Generation Tomorrow={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 500)
+                    If My.Settings.DebugLogging Then EventLog.WriteEntry(String.Format("In Operation Period: Invoked={0:yyyy-MM-dd HH:mm}, OperationStart={1:yyyy-MM-dd HH:mm}, OperationEnd={2:yyyy-MM-dd HH:mm}", InvokedTime, OffPeakStart, PeakStart), EventLogEntryType.Information, 714)
+                    If StandbyIntent And InvokedTime >= Sunset And Not ChargingIntent Then
+                        If SetPWMode("Pre-Peak SOC would be below required SOC, Switching to Standby for Off Peak", "Enter", "Standby", NewTarget, DischargeMode, Intent) = 202 Then
+                            OnStandby = True
+                            PreCharging = False
+                        End If
+                    ElseIf SOC.percentage >= NewTarget And StandbyIntent And Not ChargingIntent And InvokedTime >= Sunset Then
+                        EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 505)
+                        If SetPWMode("Switching to Standby for Off Peak, Standby Mode Enabled", "Enter", "Standby", NewTarget, DischargeMode, Intent) = 202 Then
+                            OnStandby = True
+                            PreCharging = False
+                        End If
+                    ElseIf (LastTarget < NewTarget And OnStandby) Or (LastTarget < NewTarget And PreCharging) Or ChargingIntent Then
+                        If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 514)
+                        If SetPWMode("Current SOC below required Pre-Peak SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
+                            PreCharging = True
+                            OnStandby = False
+                        End If
+                    ElseIf (SOC.percentage < NewTarget) Or (LastTarget < NewTarget And Not ChargingIntent) Then
+                        If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Charge Target Increased & SOC below required setting or Charging now Required: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 516)
+                        If SetPWMode("Current SOC below required Pre-Peak SOC", "Enter", IIf(NewTarget > (SOC.percentage + 5), "Charging", "Standby").ToString, NewTarget, IIf(My.Settings.PWChargeModeBackup, backup, DischargeMode).ToString, Intent) = 202 Then
+                            PreCharging = True
+                            OnStandby = False
+                        End If
+                    ElseIf SOC.percentage >= NewTarget And Not ChargingIntent Then
+                        EventLog.WriteEntry(String.Format("Current SOC above required setting: Current SOC={0}, Required at end of Off-Peak={1}, Shortfall Generation={2}, As at now, Charge Target={3}", SOC.percentage, RawTargetSOC, ShortfallInsolation, NewTarget), EventLogEntryType.Information, 502)
+                        If SetPWMode("Switching to Standby", "Enter", "Standby", NewTarget, DischargeMode, Intent) = 202 Then
+                            OnStandby = True
+                            PreCharging = False
+                        End If
+                    End If
+                Else
+                    If My.Settings.VerboseLogging Then EventLog.WriteEntry(String.Format("Outside Operation Period: SOC={0}", SOC.percentage), EventLogEntryType.Information, 503)
+                End If
+            Catch Ex As Exception
+                EventLog.WriteEntry(Ex.Message & vbCrLf & vbCrLf & Ex.StackTrace, EventLogEntryType.Error, 510)
+            End Try
+        End If
+
+
         If My.Settings.PBIChargeIntentEndpoint <> String.Empty Then
             Try
                 Dim PBIRows As New PBIChargeLogging With {.Rows = New List(Of ChargePlan)}
