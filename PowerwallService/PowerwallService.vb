@@ -754,19 +754,18 @@ Public Class PowerwallService
 
         ' HA Override Here
         Dim LocalTimerMode As Boolean = False
+        Dim OverrideEntity As EntityState.Entity
+        Dim OverrideCharge As EntityState.Entity = Nothing
+        Dim TimerMode As EntityState.Entity
         If My.Settings.UseHA Then
-            Dim OverrideEntity As EntityState.Entity
-            Dim TimerMode As EntityState.Entity
             OverrideEntity = GetHAStateEntity(Of EntityState.Entity)(My.Settings.HAOverrideForecast)
             TimerMode = GetHAStateEntity(Of EntityState.Entity)(My.Settings.HATimerMode)
             If OverrideEntity.state = "on" Or TimerMode.state = "on" Then
-                Dim OverrideCharge As EntityState.Entity
                 OverrideCharge = GetHAStateEntity(Of EntityState.Entity)(My.Settings.HAChargeTarget)
                 NewTarget = CDec(OverrideCharge.state)
                 EventLog.WriteEntry(String.Format("Home Assistant Override Status: {0} - Target {1}", OverrideEntity.state, OverrideCharge.state), EventLogEntryType.Information, 930)
                 If TimerMode.state = "on" Then
                     LocalTimerMode = True
-                    NewTarget = CInt(OverrideCharge.state)
                     If Not TimerModeWindowFetched Then
                         TimerModeStart = GetHAStateEntity(Of EntityState.Entity)(My.Settings.HAChargeWindowStart)
                         TimerModeEnd = GetHAStateEntity(Of EntityState.Entity)(My.Settings.HAChargeWindowEnd)
@@ -804,10 +803,10 @@ Public Class PowerwallService
         If LocalTimerMode Then
             If InvokedTime >= DateAdd(DateInterval.Minute, -6, TimerModeEndTime) Then
                 OperationLockout = TimerModeEndTime
-                EventLog.WriteEntry(String.Format("Reaching end of timer mode with SOC={0}, was aiming for Target={1}", SOC.percentage, NewTarget), EventLogEntryType.Information, 515)
+                EventLog.WriteEntry(String.Format("Reaching end of timer mode with SOC={0}, was aiming for Target={1}", SOC.percentage, CDec(OverrideCharge.state)), EventLogEntryType.Information, 515)
                 DoExitCharging(Intent)
             ElseIf InvokedTime >= TimerModeStartTime And InvokedTime <= DateAdd(DateInterval.Minute, -10, TimerModeEndTime) Then
-                If SetPWMode("In timer mode with SOC of {0} with target of {1}", "Enter", "Charging", NewTarget, DischargeMode, "Timer Mode") = 202 Then
+                If SetPWMode("In timer mode with SOC of {0} with target of {1}", "Enter", "Charging", CDec(OverrideCharge.state), DischargeMode, "Timer Mode") = 202 Then
                     PreCharging = True
                     OnStandby = False
                 End If
